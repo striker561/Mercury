@@ -172,6 +172,11 @@ func (m *Manager) PeerCount() int {
 	return m.peerMap.Len()
 }
 
+// GetPeers returns a snapshot of all known peers.
+func (m *Manager) GetPeers() []Peer {
+	return m.peerMap.GetPeers()
+}
+
 // Running returns whether the manager is currently started.
 func (m *Manager) Running() bool {
 	m.mu.Lock()
