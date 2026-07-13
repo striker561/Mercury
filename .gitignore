@@ -1,0 +1,25 @@
+# Go
+bin/
+.task/
+
+# Frontend
+frontend/dist/
+frontend/node_modules/
+frontend/bindings/
+
+# Build artifacts
+build/linux/appimage/build/
+build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+*.swp
+*.swo
+
+# Binary
+mercury
+mercury.exe

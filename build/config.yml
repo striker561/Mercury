@@ -1,0 +1,39 @@
+# This file contains the configuration for this project.
+version: "3"
+
+info:
+  companyName: "Mercury"
+  productName: "Mercury"
+  productIdentifier: "com.mercury.app"
+  description: "LAN Clipboard & File Sharing"
+  copyright: "(c) 2026, Mercury"
+  comments: "Cross-platform LAN clipboard and file sharing tray app"
+  version: "0.1.0"
+
+dev_mode:
+  root_path: ..
+  log_level: warn
+  debounce: 1000
+  ignore:
+    dir:
+      - .git
+      - node_modules
+      - frontend
+      - bin
+    file:
+      - .DS_Store
+      - .gitignore
+      - .gitkeep
+      - "*_test.go"
+    watched_extension:
+      - "*.go"
+      - "*.js"
+      - "*.ts"
+    git_ignore: true
+  executes:
+    - cmd: wails3 build DEV=true
+      type: blocking
+    - cmd: wails3 task -f build/Taskfile.yml dev:frontend
+      type: background
+    - cmd: wails3 task run
+      type: primary

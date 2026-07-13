@@ -1,0 +1,15 @@
+{
+	"fixed": {
+		"file_version": "0.1.0"
+	},
+	"info": {
+		"0000": {
+			"ProductVersion": "0.1.0",
+			"CompanyName": "Mercury",
+			"FileDescription": "LAN Clipboard & File Sharing",
+			"LegalCopyright": "© now, My Company",
+			"ProductName": "Mercury",
+			"Comments": "This is a comment"
+		}
+	}
+}
