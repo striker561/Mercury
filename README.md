@@ -1,59 +1,147 @@
-# Welcome to Your New Wails3 Project!
+# ☿ Mercury
 
-Congratulations on generating your Wails3 application! This README will guide you through the next steps to get your project up and running.
+> *"I carry messages. Yours, specifically. Across your LAN. Without the clouds, without the drama, and definitely without your data ending up in a database you didn't sign up for."*
+
+Mercury is a cross-platform LAN clipboard and file sharing tray app. It lives in your system tray, judges your networking setup silently, and ensures whatever you copy on one machine appears on another — provided they share the same passphrase and are on the same network.
+
+No cloud. No accounts. No history. **It just works.** Like a messenger god, but for your clipboard.
+
+## Features
+
+- **Clipboard sync** — Copy text or images on one machine. Paste on another. It's that simple.
+- **File transfer** — Drag a file onto the tray, your peer gets asked if they want it. They can say yes. They can say no. We judge either way.
+- **System tray** — Sits in your tray like a smug little orb. No dock icon. No taskbar presence. You'll forget it exists until you need it. That's the point.
+
+### What it is NOT
+
+- **Not a clipboard manager.** We don't store history. We don't search. We don't pin. We're a courier, not a hoarder.
+- **Not cloud-based.** We don't know what "the cloud" is. We use the LAN. It's older, wiser, and doesn't require a monthly subscription.
+- **Not cross-internet.** If you can't ping each other, we can't help you. Get closer.
+
+## Tech Stack
+
+| Layer | Choice | Why |
+|-------|--------|-----|
+| Framework | Wails v3 | Because writing web views in bare C++ is barbaric |
+| Backend | Go | Because I wanted to learn it, and it's fast enough to judge you in real-time |
+| Frontend | React + TypeScript | Because you have to suffer somewhere |
+| Bundler | Bun | It's fast. It's trendy. I like it. |
+| Encryption | AES-256-GCM + PBKDF2 | Your cat pictures are safe |
+| Discovery | mDNS (zeroconf) | No central server. No config. It just works. |
 
 ## Getting Started
 
-1. Navigate to your project directory in the terminal.
+### Prerequisites
 
-2. To run your application in development mode, use the following command:
+- Go 1.25+ (we use the toolchain, you heathen)
+- Bun (for the frontend)
+- Wails v3 CLI
+- **Linux:** `libgtk-4-dev`, `libwebkitgtk-6.0-dev`
+- **macOS:** Xcode. You know what to do.
+- **Windows:** WebView2. It's already there. Probably.
 
-   ```
-   wails3 dev
-   ```
+### Install Wails v3
 
-   This will start your application and enable hot-reloading for both frontend and backend changes.
+```bash
+go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+```
 
-3. To build your application for production, use:
+### Install System Dependencies (Linux)
 
-   ```
-   wails3 build
-   ```
+```bash
+sudo apt install libgtk-4-dev libwebkitgtk-6.0-dev
+```
 
-   This will create a production-ready executable in the `build` directory.
+### Run in Dev Mode
 
-## Exploring Wails3 Features
+```bash
+cd mercury
+GOTOOLCHAIN=go1.25.12 wails3 dev
+```
 
-Now that you have your project set up, it's time to explore the features that Wails3 offers:
+The tray appears. The frontend hot-reloads. You change code. It updates. You feel like a god. This is intentional.
 
-1. **Check out the examples**: The best way to learn is by example. Visit the `examples` directory in the `v3/examples` directory to see various sample applications.
+### Build for Production
 
-2. **Run an example**: To run any of the examples, navigate to the example's directory and use:
+```bash
+GOTOOLCHAIN=go1.25.12 go build -o mercury .
+```
 
-   ```
-   go run .
-   ```
-
-   Note: Some examples may be under development during the alpha phase.
-
-3. **Explore the documentation**: Visit the [Wails3 documentation](https://v3.wails.io/) for in-depth guides and API references.
-
-4. **Join the community**: Have questions or want to share your progress? Join the [Wails Discord](https://discord.gg/JDdSxwjhGf) or visit the [Wails discussions on GitHub](https://github.com/wailsapp/wails/discussions).
+One binary. Zero dependencies. Divine.
 
 ## Project Structure
 
-Take a moment to familiarize yourself with your project structure:
+```
+mercury/
+├── main.go               # Entry point. Starts the god machine.
+├── app/
+│   ├── main.go           # Application bootstrap. Wires everything together.
+│   ├── app.go            # MercuryApp — the bindings the frontend talks to.
+│   ├── backend/
+│   │   ├── sync/         # LAN sync engine (crypto, peer mgmt, discovery, transport)
+│   │   ├── clipboard/    # Clipboard watcher
+│   │   └── transfer/     # File transfer
+│   └── system/
+│       └── tray.go       # System tray menu builder. Small. Angry. Effective.
+├── build/                # Build configuration. You don't need to be here.
+├── frontend/             # React + TypeScript + Vite. The pretty face.
+├── go.mod                # Dependencies. Handle with care.
+└── Taskfile.yml          # Task runner. Type `wails3 dev` and witness magic.
+```
 
-- `frontend/`: Contains your frontend code (HTML, CSS, JavaScript/TypeScript)
-- `main.go`: The entry point of your Go backend
-- `app.go`: Define your application structure and methods here
-- `wails.json`: Configuration file for your Wails project
+## Usage
 
-## Next Steps
+### Tray
 
-1. Modify the frontend in the `frontend/` directory to create your desired UI.
-2. Add backend functionality in `main.go`.
-3. Use `wails3 dev` to see your changes in real-time.
-4. When ready, build your application with `wails3 build`.
+- **Left click** — Settings window appears. Configure your passphrase. Judge your peers.
+- **Right click** — Context menu. Mercury header (gods don't need interaction). Peer count (dynamic, because we're generous). Pause/Resume. Quit.
 
-Happy coding with Wails3! If you encounter any issues or have questions, don't hesitate to consult the documentation or reach out to the Wails community.
+The tray icon has two moods:
+- **Connected** — peers are nearby. The network is alive.
+- **Idle** — you're alone. Like always.
+
+### Settings
+
+| Section | What it does |
+|---------|-------------|
+| Sync | Passphrase input with show/hide. Enable/disable toggle. Start and stop the god machine. |
+| Peers | Live list of connected devices. Refreshes every 5 seconds because we care. |
+| Files | Where received files land (default `~/Mercury/`). Change folder when you feel adventurous. |
+
+## Security Model
+
+Because even gods respect privacy.
+
+1. **Passphrase** — Never transmitted over the network. It stays on your machine. It's a secret. Keep it that way.
+2. **PBKDF2** — Key derived once at startup with 100,000 iterations of SHA-256. Never again. We're not animals.
+3. **AES-256-GCM** — Authenticated encryption. Wrong key? Decryption error. Silent drop. No drama.
+4. **mDNS** — Announces presence only. No keys. No secrets. Just "hey I exist" — the networking equivalent of a nod.
+5. **25MB max** for clipboard sync. If your clipboard is larger than 25MB, you're doing something wrong. We silently skip it.
+
+## Performance
+
+| Metric | Target |
+|--------|--------|
+| Idle RAM | Under 50MB |
+| Idle CPU | Effectively 0% (we're not crypto miners) |
+| Copy-to-available | Under 500ms on LAN |
+| Heartbeat | UDP (not TCP — we're not savages) |
+
+## Roadmap
+
+- **Phase 1** — Tray shell with settings window ✅
+- **Phase 2** — Clipboard sync (text + images) 🚧
+- **Phase 3** — File transfer with accept/reject flow ⏳
+- **Phase 4** — Polish, autostart, edge cases, icons ⏳
+
+## Contributing
+
+This is a learning project. I'm figuring Go out as I go. If you see something stupid, laugh, then open an issue. Or a PR. Or both.
+
+## License
+
+[MIT](LICENSE). Do what you want. Don't blame me if you paste something embarrassing across the office LAN.
+
+---
+
+*Built with Go, Wails, and an unreasonable amount of sarcasm.*

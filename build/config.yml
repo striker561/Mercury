@@ -11,7 +11,7 @@ info:
   version: "0.1.0"
 
 dev_mode:
-  root_path: ..
+  root_path: .
   log_level: warn
   debounce: 1000
   ignore:
@@ -31,9 +31,13 @@ dev_mode:
       - "*.ts"
     git_ignore: true
   executes:
-    - cmd: wails3 build DEV=true
-      type: blocking
-    - cmd: wails3 task -f build/Taskfile.yml dev:frontend
+    - cmd: cd frontend && bun install
+      type: once
+    - cmd: cd frontend && WAILS_VITE_PORT=9245 bun run dev
       type: background
-    - cmd: wails3 task run
+    - cmd: go mod tidy
+      type: blocking
+    - cmd: go build -o bin/mercury .
+      type: blocking
+    - cmd: ./bin/mercury
       type: primary
