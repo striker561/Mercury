@@ -151,9 +151,15 @@ func (m *Manager) Broadcast(payload []byte) {
 		return
 	}
 
-	go func() {
-		for _, p := range peers {
+	// Send to all peers concurrently — one slow peer should not delay the rest.
+	var wg sync.WaitGroup
+	for _, p := range peers {
+		wg.Add(1)
+		p := p // capture loop variable
+		go func() {
+			defer wg.Done()
 			ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
+			defer cancel()
 			if err := Send(ctx, p.Addr, ciphertext); err != nil {
 				log.Printf("[sync] send to %s (%s) failed: %v", p.ID, p.Addr, err)
 				if m.peerMap.RecordFailure(p.ID) {
@@ -162,9 +168,9 @@ func (m *Manager) Broadcast(payload []byte) {
 			} else {
 				m.peerMap.ResetFailures(p.ID)
 			}
-			cancel()
-		}
-	}()
+		}()
+	}
+	wg.Wait()
 }
 
 // PeerCount returns the number of currently known peers.

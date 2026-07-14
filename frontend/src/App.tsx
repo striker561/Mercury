@@ -1,17 +1,35 @@
 import { useState, useEffect } from "react";
 import { MercuryApp } from "../bindings/mercury/app";
 
+const SETTINGS_KEYS = {
+  passphrase: "passphrase",
+  syncEnabled: "sync_enabled",
+  paused: "paused",
+  allowFiles: "allow_files",
+  receivedFolder: "received_folder",
+  autostart: "autostart",
+};
+
 function App() {
   const [passphrase, setPassphrase] = useState("");
   const [showPassphrase, setShowPassphrase] = useState(false);
   const [syncEnabled, setSyncEnabled] = useState(false);
+  const [allowFiles, setAllowFiles] = useState(true);
+  const [autostart, setAutostart] = useState(false);
   const [peers, setPeers] = useState<string[]>([]);
-  const [receivedFolder] = useState("~/Mercury/");
-  const [version] = useState("");
+  const [receivedFolder, setReceivedFolder] = useState("~/Mercury/");
+  const [version, setVersion] = useState("");
 
   useEffect(() => {
-    MercuryApp.GetVersion().then((v) => {
-      // version state update handled via setVersion if needed
+    // Single IPC call loads version + all settings.
+    MercuryApp.GetAllSettings().then((s) => {
+      if (!s) return;
+      setVersion(s["version"] ?? "0.1.0");
+      setPassphrase(s[SETTINGS_KEYS.passphrase] ?? "");
+      setSyncEnabled(s[SETTINGS_KEYS.syncEnabled] === "true");
+      setAllowFiles(s[SETTINGS_KEYS.allowFiles] !== "false");
+      setAutostart(s[SETTINGS_KEYS.autostart] === "true");
+      setReceivedFolder(s[SETTINGS_KEYS.receivedFolder] ?? "~/Mercury/");
     });
     loadPeers();
     const interval = setInterval(loadPeers, 5000);
@@ -20,7 +38,8 @@ function App() {
 
   const loadPeers = () => {
     MercuryApp.GetPeers().then((p) => {
-      setPeers(p.map((peer: any) => peer.hostname || peer.id || "unknown"));
+      if (p)
+        setPeers(p.map((peer: any) => peer.hostname || peer.id || "unknown"));
     });
   };
 
@@ -35,11 +54,23 @@ function App() {
     });
   };
 
+  const handleToggleFiles = () => {
+    const next = !allowFiles;
+    setAllowFiles(next);
+    MercuryApp.SetSetting(SETTINGS_KEYS.allowFiles, next ? "true" : "false");
+  };
+
+  const handleToggleAutostart = () => {
+    const next = !autostart;
+    setAutostart(next);
+    MercuryApp.SetSetting(SETTINGS_KEYS.autostart, next ? "true" : "false");
+  };
+
   return (
     <div className="settings">
       <div className="settings-header">
         <h1>Mercury</h1>
-        <span className="settings-version">{version}</span>
+        <span className="settings-version">v{version}</span>
       </div>
 
       {/* Section 1 — Sync */}
@@ -68,7 +99,7 @@ function App() {
             onClick={handlePassphraseSave}
             disabled={!passphrase}
           >
-            Save & Enable Sync
+            Save &amp; Enable Sync
           </button>
           <button className="btn-secondary" onClick={handleToggleSync}>
             {syncEnabled ? "Pause Sync" : "Resume Sync"}
@@ -104,6 +135,33 @@ function App() {
               Change
             </button>
           </div>
+        </div>
+        <div className="toggle-row">
+          <label className="toggle-label">
+            <span>Accept incoming files</span>
+            <input
+              type="checkbox"
+              className="toggle"
+              checked={allowFiles}
+              onChange={handleToggleFiles}
+            />
+          </label>
+        </div>
+      </section>
+
+      {/* Section 4 — Preferences */}
+      <section className="settings-section">
+        <h2>Preferences</h2>
+        <div className="toggle-row">
+          <label className="toggle-label">
+            <span>Start on login</span>
+            <input
+              type="checkbox"
+              className="toggle"
+              checked={autostart}
+              onChange={handleToggleAutostart}
+            />
+          </label>
         </div>
       </section>
     </div>

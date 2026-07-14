@@ -233,3 +233,56 @@ input:focus {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ─── Toggle Switches ─── */
+.toggle-row {
+  margin-top: 12px;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.toggle {
+  appearance: none;
+  width: 36px;
+  height: 20px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  position: relative;
+  transition:
+    background 0.2s,
+    border-color 0.2s;
+  flex-shrink: 0;
+}
+
+.toggle::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  transition:
+    transform 0.2s,
+    background 0.2s;
+}
+
+.toggle:checked {
+  background: var(--text);
+  border-color: var(--text);
+}
+
+.toggle:checked::after {
+  transform: translateX(16px);
+  background: var(--bg);
+}

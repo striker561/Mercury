@@ -136,9 +136,53 @@ func (m *MercuryApp) GetPeers() []map[string]string {
 	return m.syncSvc.GetPeers()
 }
 
+// GetAllSettings returns all known settings plus the app version
+// in a single IPC round-trip.
+//
+// Why batch? Every Wails IPC call has overhead (JSON serialisation,
+// Go->JS marshalling, event loop tick). Loading 30 settings individually
+// would be 30 round-trips. One call with a map[string]string is always
+// faster — the overhead of sending a few extra bytes is negligible
+// compared to 29 extra bridge crossings.
+//
+// Similarly, storage.DB.All() runs one SQL query, not one per key.
+func (m *MercuryApp) GetAllSettings() map[string]string {
+	out := map[string]string{"version": "0.1.0"}
+	if m.db != nil {
+		s := m.db.All() // single SQL query, fills in defaults
+		for k, v := range s {
+			out[k] = v
+		}
+	} else {
+		for _, k := range storage.AllKeys() {
+			out[k] = storage.Default(k)
+		}
+	}
+	return out
+}
+
+// GetSetting returns any setting by key, falling back to its default.
+func (m *MercuryApp) GetSetting(key string) string {
+	if m.db == nil {
+		return storage.Default(key)
+	}
+	return m.db.GetDefaulted(key)
+}
+
+// SetSetting saves any setting by key.
+func (m *MercuryApp) SetSetting(key, value string) {
+	if m.db != nil {
+		m.db.Set(key, value)
+	}
+	// Special handling for settings that need runtime action.
+	if key == storage.KeyAllowFiles && value == "false" && m.clipSvc != nil {
+		m.clipSvc.Pause()
+	}
+}
+
 // GetReceivedFolder returns the path where received files are stored.
 func (m *MercuryApp) GetReceivedFolder() string {
-	return "~/Mercury/"
+	return m.GetSetting(storage.KeyReceivedFolder)
 }
 
 // DetectGNOME returns true if running under GNOME desktop.
