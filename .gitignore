@@ -3,7 +3,8 @@ bin/
 .task/
 
 # Frontend
-frontend/dist/
+frontend/dist/*
+!frontend/dist/.gitkeep
 frontend/node_modules/
 frontend/bindings/
 

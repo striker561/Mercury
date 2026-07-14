@@ -69,11 +69,9 @@ func Run(assets embed.FS) error {
 		log.Println("[mercury] application started")
 	})
 
-	// Run the application (blocks until exit).
+	// Run the application (blocks until exit).  Wails handles tray cleanup
+	// internally — calling tray.Destroy() here would double-close a channel.
 	err := app.Run()
-
-	// Cleanup.
-	tray.Destroy()
 
 	return err
 }
