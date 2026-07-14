@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -23,9 +24,22 @@ func Run(assets embed.FS) error {
 
 	mercuryApp := NewMercuryApp()
 
-	// Create notification service for OS-level alerts.
+	// Create notification service for OS-level file offer alerts.
+	// On macOS this requires a bundled .app with a valid CFBundleIdentifier
+	// (only available in production builds).  In dev mode we skip it.
 	notifySvc := notifications.New()
 	mercuryApp.SetNotifier(notifySvc)
+
+	svcs := []application.Service{
+		application.NewService(mercuryApp),
+	}
+	// Only register the notification service when running from a proper
+	// macOS bundle (or on Linux/Windows where it always works).
+	if !isDarwinDev() {
+		svcs = append(svcs, application.NewService(notifySvc))
+	} else {
+		log.Println("[mercury] skipping notification service (dev mode — no bundle ID)")
+	}
 
 	app := application.New(application.Options{
 		Name:        "Mercury",
@@ -33,10 +47,7 @@ func Run(assets embed.FS) error {
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
 		},
-		Services: []application.Service{
-			application.NewService(mercuryApp),
-			application.NewService(notifySvc),
-		},
+		Services: svcs,
 		Mac: application.MacOptions{
 			ActivationPolicy: application.ActivationPolicyAccessory,
 			ApplicationShouldTerminateAfterLastWindowClosed: false,
@@ -138,6 +149,18 @@ func Run(assets embed.FS) error {
 	err := app.Run()
 
 	return err
+}
+
+// isDarwinDev returns true on macOS when NOT running from a bundled .app.
+// The notification service needs CFBundleIdentifier which only exists
+// inside a proper macOS bundle (production builds).
+func isDarwinDev() bool {
+	exe, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	// A bundled .app has a path like .../Mercury.app/Contents/MacOS/mercury
+	return !strings.Contains(filepath.ToSlash(exe), ".app/Contents/MacOS/")
 }
 
 // detectGNOME checks if we're running under the GNOME desktop environment.
