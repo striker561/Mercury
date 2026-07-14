@@ -13,6 +13,7 @@ import (
 	"mercury/app/services"
 
 	goclipboard "golang.design/x/clipboard"
+	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/services/notifications"
 )
 
@@ -24,6 +25,7 @@ type MercuryApp struct {
 	transSvc    *services.TransferService
 	showWindow  func()
 	notifySvc   *notifications.NotificationService
+	autostart   *application.AutostartManager
 }
 
 // SetShowWindow registers a callback to show the settings window.
@@ -34,6 +36,11 @@ func (m *MercuryApp) SetShowWindow(fn func()) {
 // SetNotifier stores the notification service for OS-level alerts.
 func (m *MercuryApp) SetNotifier(ns *notifications.NotificationService) {
 	m.notifySvc = ns
+}
+
+// SetAutostartManager stores the OS autostart manager.
+func (m *MercuryApp) SetAutostartManager(am *application.AutostartManager) {
+	m.autostart = am
 }
 
 // NewMercuryApp creates a new MercuryApp instance and opens the settings DB.
@@ -250,6 +257,17 @@ func (m *MercuryApp) SetSetting(key, value string) {
 	// Special handling for settings that need runtime action.
 	if key == storage.KeyAllowFiles && value == "false" && m.clipSvc != nil {
 		m.clipSvc.Pause()
+	}
+	if key == storage.KeyAutostart && m.autostart != nil {
+		if value == "true" {
+			if err := m.autostart.Enable(); err != nil {
+				log.Printf("[mercury] autostart enable: %v", err)
+			}
+		} else {
+			if err := m.autostart.Disable(); err != nil {
+				log.Printf("[mercury] autostart disable: %v", err)
+			}
+		}
 	}
 }
 

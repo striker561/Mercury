@@ -54,6 +54,9 @@ func Run(assets embed.FS) error {
 		},
 	})
 
+	// Wire the autostart manager so the "Start on login" setting works.
+	mercuryApp.SetAutostartManager(app.Autostart)
+
 	// Create the settings window (hidden by default, shown on tray click).
 	settingsWindow := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             "settings",
