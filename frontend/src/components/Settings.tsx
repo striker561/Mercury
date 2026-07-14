@@ -1,154 +1,79 @@
 import { useState, useEffect } from "react";
+import { Eye, EyeSlash } from "@phosphor-icons/react";
 import { MercuryApp } from "../../bindings/mercury/app";
 
-const KEYS = {
-  passphrase: "passphrase",
-  syncEnabled: "sync_enabled",
-  paused: "paused",
-  allowFiles: "allow_files",
-  receivedFolder: "received_folder",
-  autostart: "autostart",
-  autoAccept: "auto_accept",
-};
-
 export default function Settings() {
-  const [passphrase, setPassphrase] = useState("");
-  const [showPassphrase, setShowPassphrase] = useState(false);
-  const [syncEnabled, setSyncEnabled] = useState(false);
-  const [allowFiles, setAllowFiles] = useState(true);
-  const [autostart, setAutostart] = useState(false);
-  const [autoAccept, setAutoAccept] = useState(false);
-  const [receivedFolder, setReceivedFolder] = useState("~/Mercury/");
+  const [pass, setPass] = useState("");
+  const [show, setShow] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [accept, setAccept] = useState(true);
+  const [auto, setAuto] = useState(false);
+  const [startup, setStartup] = useState(false);
+  const [folder, setFolder] = useState("~/Downloads/Mercury/");
 
   useEffect(() => {
     MercuryApp.GetAllSettings().then((s: any) => {
       if (!s) return;
-      setPassphrase(s[KEYS.passphrase] ?? "");
-      setSyncEnabled(s[KEYS.syncEnabled] === "true");
-      setAllowFiles(s[KEYS.allowFiles] !== "false");
-      setAutostart(s[KEYS.autostart] === "true");
-      setAutoAccept(s[KEYS.autoAccept] === "true");
-      setReceivedFolder(s[KEYS.receivedFolder] ?? "~/Mercury/");
+      setPass(s.passphrase ?? "");
+      setPaused(s.paused === "true");
+      setAccept(s.allow_files !== "false");
+      setStartup(s.autostart === "true");
+      setAuto(s.auto_accept === "true");
+      setFolder(s.received_folder ?? "~/Downloads/Mercury/");
     });
   }, []);
 
-  const handlePassphraseSave = () => {
-    MercuryApp.SetPassphrase(passphrase);
-    setSyncEnabled(true);
+  const save = () => MercuryApp.SetPassphrase(pass);
+  const toggle = (k: string, v: boolean, fn: (x: boolean) => void) => {
+    fn(!v); MercuryApp.SetSetting(k, !v ? "true" : "false");
   };
-
-  const handleToggleSync = () => {
-    MercuryApp.TogglePause().then((paused: boolean) => {
-      setSyncEnabled(!paused);
-    });
-  };
-
-  const handleToggleFiles = () => {
-    const next = !allowFiles;
-    setAllowFiles(next);
-    MercuryApp.SetSetting(KEYS.allowFiles, next ? "true" : "false");
-  };
-
-  const handleToggleAutostart = () => {
-    const next = !autostart;
-    setAutostart(next);
-    MercuryApp.SetSetting(KEYS.autostart, next ? "true" : "false");
-  };
-
-  const handleToggleAutoAccept = () => {
-    const next = !autoAccept;
-    setAutoAccept(next);
-    MercuryApp.SetSetting(KEYS.autoAccept, next ? "true" : "false");
-  };
+  const pick = () => MercuryApp.PickReceivedFolder().then((p: any) => { if (p) setFolder(p); });
 
   return (
     <>
-      {/* Sync */}
-      <section className="settings-section">
-        <h2>Sync</h2>
-        <div className="settings-field">
-          <label>Passphrase</label>
-          <div className="password-row">
-            <input
-              type={showPassphrase ? "text" : "password"}
-              value={passphrase}
-              onChange={(e) => setPassphrase(e.target.value)}
-              placeholder="Enter shared passphrase"
-            />
-            <button
-              className="btn-icon"
-              onClick={() => setShowPassphrase(!showPassphrase)}
-            >
-              {showPassphrase ? "Hide" : "Show"}
-            </button>
+      <div className="section-label">Sync</div>
+      <div className="card">
+        <div className="row">
+          <span className="row-label">Passphrase</span>
+          <div className="pw-wrap">
+            <input type={show ? "text" : "password"} value={pass}
+              onChange={e => setPass(e.target.value)} placeholder="passphrase" />
+            <button onClick={() => setShow(!show)}>{show ? <EyeSlash size={14} /> : <Eye size={14} />}</button>
           </div>
         </div>
-        <div className="settings-actions">
-          <button
-            className="btn-primary"
-            onClick={handlePassphraseSave}
-            disabled={!passphrase}
-          >
-            Save
-          </button>
-          <button className="btn-secondary" onClick={handleToggleSync}>
-            {syncEnabled ? "Pause" : "Resume"}
-          </button>
+        <div className="row">
+          <span className="row-label">Sync</span>
+          <button className={`tog ${!paused ? "on" : ""}`} onClick={() => MercuryApp.TogglePause().then(setPaused)} aria-label="Sync toggle" />
         </div>
-      </section>
+        <div className="row" style={{ marginTop: 8, border: "none", padding: 0 }}>
+          <button className="btn btn-primary" onClick={save} disabled={!pass}>Save</button>
+        </div>
+      </div>
 
-      {/* Files Config */}
-      <section className="settings-section">
-        <h2>Files</h2>
-        <div className="settings-field">
-          <label>Received files folder</label>
-          <div className="folder-row">
-            <span className="folder-path">{receivedFolder}</span>
-            <button className="btn-secondary" disabled>
-              Browse
-            </button>
-          </div>
+      <div className="section-label" style={{ marginTop: 4 }}>Files</div>
+      <div className="card">
+        <div className="row">
+          <span className="row-label">Save to</span>
+          <span className="row-value" style={{ flex: 1, maxWidth: 140 }}>{folder}</span>
+          <button className="btn btn-ghost btn-sm" onClick={pick}>Change</button>
         </div>
-        <div className="toggle-row">
-          <label className="toggle-label">
-            <span>Accept incoming files</span>
-            <input
-              type="checkbox"
-              className="toggle"
-              checked={allowFiles}
-              onChange={handleToggleFiles}
-            />
-          </label>
+        <div className="row">
+          <span className="row-label">Accept</span>
+          <button className={`tog ${accept ? "on" : ""}`} onClick={() => toggle("allow_files", accept, setAccept)} aria-label="Toggle accept" />
         </div>
-        <div className={`toggle-row ${!allowFiles ? "toggle-disabled" : ""}`}>
-          <label className="toggle-label">
-            <span>Auto-accept files</span>
-            <input
-              type="checkbox"
-              className="toggle"
-              checked={autoAccept}
-              disabled={!allowFiles}
-              onChange={handleToggleAutoAccept}
-            />
-          </label>
+        <div className="row" style={{ opacity: accept ? 1 : 0.4 }}>
+          <span className="row-label">Auto-accept</span>
+          <button className={`tog ${auto ? "on" : ""}`} onClick={() => accept && toggle("auto_accept", auto, setAuto)} aria-label="Toggle auto-accept" />
         </div>
-      </section>
+      </div>
 
-      {/* Preferences */}
-      <section className="settings-section">
-        <h2>Preferences</h2>
-        <div className="toggle-row">
-          <label className="toggle-label">
-            <span>Start on login</span>
-            <input
-              type="checkbox"
-              className="toggle"
-              checked={autostart}
-              onChange={handleToggleAutostart}
-            />
-          </label>
+      <div className="section-label" style={{ marginTop: 4 }}>Preferences</div>
+      <div className="card">
+        <div className="row">
+          <span className="row-label">Start on login</span>
+          <button className={`tog ${startup ? "on" : ""}`} onClick={() => toggle("autostart", startup, setStartup)} aria-label="Toggle autostart" />
         </div>
-      </section>
+      </div>
     </>
   );
 }
