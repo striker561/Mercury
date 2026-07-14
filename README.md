@@ -145,7 +145,7 @@ Pull requests that make me faster, cleaner, or more divine are welcome. Pull req
 
 ## License
 
-[MIT](LICENSE). Do what you want. Do not blame me if you paste something embarrassing across the office LAN. I delivered it faithfully. That is my job.
+[GNU GPL v3](LICENSE). Free as in freedom. If you modify and distribute, your changes stay open too. Do not blame me if you paste something embarrassing across the office LAN. I delivered it faithfully. That is my job.
 
 ---
 
