@@ -2,46 +2,44 @@
 
 *Even gods have a to-do list. Ours is shorter than most.*
 
-## Phase 1 — Tray Shell
+## ✅ Phase 1 — Tray Shell
 
 - [x] Wails v3 project scaffold
 - [x] System tray with right-click menu and hidden settings window
-- [x] MercuryApp Wails bindings for frontend communication
+- [x] MercuryApp Wails bindings (TypeScript)
 - [x] Cross-platform build config (Linux, macOS, Windows)
 - [x] Dev mode working with Vite hot-reload
 - [x] Monochrome Settings UI
 
-## Phase 2 — Clipboard Sync
+## ✅ Phase 2 — Clipboard Sync
 
-### Core
-- [ ] Clipboard watcher — detect text and image changes on the OS clipboard
-- [ ] Wire sync manager into the app (passphrase in, encryption out)
-- [ ] TCP broadcast to all known peers on the LAN
-- [ ] Receive and decrypt inbound clips, write to local clipboard
-- [ ] JSON payload format (text + image types)
-- [ ] Source tracking — never re-broadcast a clip that arrived from the network
+- [x] Clipboard watcher (150ms polling + debounce, text + image)
+- [x] Sync manager wired into the app
+- [x] mDNS discovery, TCP transport, AES-256-GCM encryption
+- [x] Receive path: network → decrypt → OS clipboard
+- [x] Broadcast path: clipboard change → encrypt → TCP to peers
+- [x] JSON payload format
+- [x] Heartbeat and failure-based eviction
+- [x] Pause/Resume support
 
-### Peers
-- [ ] Dynamic peer count in tray menu
-- [ ] Connected / idle tray state
-- [ ] Heartbeat and failure-based eviction
+## 🚧 Phase 3 — Settings & Storage
 
-### Testing
-- [ ] Text sync between two machines
-- [ ] Image sync between two machines
-- [ ] Wrong passphrase handling (silent drop)
-- [ ] 25MB clipboard limit enforcement
+- [x] SQLite settings database (`app/backend/storage/`)
+- [x] Persist passphrase between restarts
+- [x] Auto-start sync on launch if saved passphrase exists
+- [ ] Save received folder path
+- [ ] Settings UI pre-fills from saved values
+- [ ] Settings UI — Change folder button
 
-## Phase 3 — File Transfer
+## ⏳ Phase 4 — File Transfer
 
 - [ ] File offer protocol (name, size metadata)
 - [ ] Accept / reject flow with frontend UI
 - [ ] Chunked file stream over a dedicated TCP connection
 - [ ] Save received files to configurable directory
 - [ ] Transfer progress events to frontend
-- [ ] Test send/receive between two machines
 
-## Phase 4 — Polish
+## ⏳ Phase 5 — Polish
 
 - [ ] Tray icons (connected / idle states)
 - [ ] Autostart toggle

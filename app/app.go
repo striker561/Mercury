@@ -4,23 +4,41 @@ import (
 	"log"
 
 	"mercury/app/backend/clipboard"
+	"mercury/app/backend/storage"
 	"mercury/app/services"
 
 	goclipboard "golang.design/x/clipboard"
 )
 
 // MercuryApp is the main application struct exposed to the Wails frontend.
-// Business logic is delegated to services/. This stays thin.
 type MercuryApp struct {
-	passphrase string
-	paused     bool
-	syncSvc    *services.SyncService
-	clipSvc    *services.ClipboardService
+	syncSvc *services.SyncService
+	clipSvc *services.ClipboardService
+	db      *storage.DB
 }
 
-// NewMercuryApp creates a new MercuryApp instance.
+// NewMercuryApp creates a new MercuryApp instance and opens the settings DB.
 func NewMercuryApp() *MercuryApp {
-	return &MercuryApp{}
+	a := &MercuryApp{}
+
+	p, err := storage.DefaultPath()
+	if err != nil {
+		log.Printf("[mercury] settings path error: %v", err)
+		return a
+	}
+	db, err := storage.Open(p)
+	if err != nil {
+		log.Printf("[mercury] settings db error: %v", err)
+		return a
+	}
+	a.db = db
+
+	// Auto-start sync if a passphrase was saved.
+	if pass := db.GetPassphrase(); pass != "" {
+		a.startSync(pass)
+	}
+
+	return a
 }
 
 // GetVersion returns the app version string.
@@ -28,18 +46,23 @@ func (m *MercuryApp) GetVersion() string {
 	return "0.1.0"
 }
 
-// SetPassphrase stores the sync passphrase and starts sync + clipboard watching.
+// SetPassphrase saves the passphrase and starts syncing.
 func (m *MercuryApp) SetPassphrase(passphrase string) {
-	m.passphrase = passphrase
-	log.Printf("[mercury] passphrase updated")
+	if m.db != nil {
+		m.db.SetPassphrase(passphrase)
+	}
+	m.startSync(passphrase)
+}
 
-	// Initialize the clipboard library (safe to call multiple times)
+// startSync initializes clipboard and begins syncing.
+func (m *MercuryApp) startSync(passphrase string) {
+	log.Printf("[mercury] starting sync")
+
 	if err := goclipboard.Init(); err != nil {
 		log.Printf("[mercury] clipboard init error: %v", err)
 		return
 	}
 
-	// Stop previous services if restarting
 	if m.syncSvc != nil {
 		m.syncSvc.Stop()
 	}
@@ -47,18 +70,15 @@ func (m *MercuryApp) SetPassphrase(passphrase string) {
 		m.clipSvc.Stop()
 	}
 
-	// Create and start sync service
 	m.syncSvc = services.NewSyncService(passphrase)
 	if err := m.syncSvc.Start(); err != nil {
 		log.Printf("[mercury] sync start error: %v", err)
 		return
 	}
 
-	// Create and start clipboard service
-	// When clipboard changes, broadcast to all peers
 	m.clipSvc = services.NewClipboardService()
 	m.clipSvc.Start(func(c clipboard.Change) {
-		if m.paused {
+		if m.db != nil && m.db.IsPaused() {
 			return
 		}
 		switch c.Type {
@@ -72,20 +92,32 @@ func (m *MercuryApp) SetPassphrase(passphrase string) {
 
 // IsPaused returns whether sync is paused.
 func (m *MercuryApp) IsPaused() bool {
-	return m.paused
+	return m.db != nil && m.db.IsPaused()
 }
 
 // TogglePause toggles the sync paused state.
 func (m *MercuryApp) TogglePause() bool {
-	m.paused = !m.paused
+	paused := m.db != nil && m.db.IsPaused()
+	paused = !paused
+	if m.db != nil {
+		m.db.SetPaused(paused)
+	}
 	if m.clipSvc != nil {
-		if m.paused {
+		if paused {
 			m.clipSvc.Pause()
 		} else {
 			m.clipSvc.Resume()
 		}
 	}
-	return m.paused
+	return paused
+}
+
+// GetSavedPassphrase returns the stored passphrase, if any.
+func (m *MercuryApp) GetSavedPassphrase() string {
+	if m.db == nil {
+		return ""
+	}
+	return m.db.GetPassphrase()
 }
 
 // GetPeerCount returns the number of connected peers.
@@ -111,5 +143,5 @@ func (m *MercuryApp) GetReceivedFolder() string {
 
 // DetectGNOME returns true if running under GNOME desktop.
 func (m *MercuryApp) DetectGNOME() bool {
-	return false // real detection in main.go via env vars
+	return false
 }
