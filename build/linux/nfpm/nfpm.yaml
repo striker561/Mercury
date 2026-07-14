@@ -28,10 +28,9 @@ contents:
 depends:
   - libgtk-4-1
   - libwebkitgtk-6.0-4
-
-# Optional: GNOME system tray (AppIndicator). Mercury still works via the window.
-recommends:
   - libayatana-appindicator3-1
+
+# GNOME tray (Pop!_OS, Ubuntu) requires AppIndicator for a visible tray icon.
 
 # Distribution-specific overrides for different package formats
 overrides:

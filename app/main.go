@@ -16,6 +16,8 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/services/notifications"
 )
 
+const singleInstanceID = "com.mercury.app"
+
 // Run is the real Mercury entry point, called from root main.go.
 // assets is the embedded frontend/dist from the root module.
 func Run(assets embed.FS) error {
@@ -44,6 +46,8 @@ func Run(assets embed.FS) error {
 		log.Println("[mercury] skipping notification service (dev mode — no bundle ID)")
 	}
 
+	var settingsWindow *application.WebviewWindow
+
 	app := application.New(application.Options{
 		Name:        "Mercury",
 		Description: "LAN Clipboard & File Sharing",
@@ -51,6 +55,17 @@ func Run(assets embed.FS) error {
 			Handler: application.AssetFileServerFS(assets),
 		},
 		Services: svcs,
+		SingleInstance: &application.SingleInstanceOptions{
+			UniqueID: singleInstanceID,
+			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
+				log.Printf("[mercury] second instance launch args=%v", data.Args)
+				if settingsWindow != nil {
+					settingsWindow.Show()
+					settingsWindow.Focus()
+				}
+			},
+			ExitCode: 0,
+		},
 		Mac: application.MacOptions{
 			ActivationPolicy: application.ActivationPolicyAccessory,
 			ApplicationShouldTerminateAfterLastWindowClosed: false,
@@ -61,7 +76,7 @@ func Run(assets embed.FS) error {
 	mercuryApp.SetAutostartManager(app.Autostart)
 
 	// Create the settings window (hidden by default, shown on tray click).
-	settingsWindow := app.Window.NewWithOptions(application.WebviewWindowOptions{
+	settingsWindow = app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             "settings",
 		Title:            "Mercury",
 		Width:            420,
@@ -76,6 +91,15 @@ func Run(assets embed.FS) error {
 			HiddenOnTaskbar: true,
 		},
 	})
+
+	toggleWindow := func() {
+		if settingsWindow.IsVisible() {
+			settingsWindow.Hide()
+		} else {
+			settingsWindow.Show()
+			settingsWindow.Focus()
+		}
+	}
 
 	// Hide instead of close — we're a tray app, closing should keep us running.
 	settingsWindow.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
@@ -114,6 +138,9 @@ func Run(assets embed.FS) error {
 	})
 	tray.SetMenu(menu)
 
+	// Left-click toggles the window; right-click opens the tray menu.
+	tray.OnClick(toggleWindow)
+
 	mercuryApp.SetEmitChange(func() {
 		app.Event.Emit("dashboard:changed")
 		updateTray(tray, refs, mercuryApp)
@@ -121,9 +148,13 @@ func Run(assets embed.FS) error {
 
 	go func() {
 		var last string
-		ticker := time.NewTicker(400 * time.Millisecond)
-		defer ticker.Stop()
-		for range ticker.C {
+		for {
+			interval := 400 * time.Millisecond
+			if settingsWindow != nil && !settingsWindow.IsVisible() {
+				interval = 3 * time.Second
+			}
+			time.Sleep(interval)
+
 			fp := mercuryApp.DashboardFingerprint()
 			if fp != last {
 				last = fp
@@ -147,10 +178,6 @@ func Run(assets embed.FS) error {
 	})
 
 	updateTray(tray, refs, mercuryApp)
-
-	// No automatic left-click toggle — the user opens the window from the
-	// context menu.  On Linux, right-click opens the menu via the native
-	// SecondaryActivate fallback (menu is set, so the menu appears).
 
 	// Register application event listeners.
 	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(event *application.ApplicationEvent) {

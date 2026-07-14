@@ -78,7 +78,7 @@ jobs:
       - name: Install system deps
         run: |
           sudo apt update
-          sudo apt install -y build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev
+          sudo apt install -y build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev libayatana-appindicator3-dev
 
       - name: Cache frontend dependencies
         uses: actions/cache@v4
@@ -86,19 +86,27 @@ jobs:
           path: frontend/node_modules
           key: frontend-${{ hashFiles('frontend/bun.lock', 'frontend/bun.lockb', 'frontend/package.json') }}
 
-      - name: Install Wails v3
-        run: go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+      - name: Install Wails v3 and nfpm
+        run: |
+          go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+          go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
+
       - name: Generate bindings
         run: wails3 generate bindings -ts -i -clean=true
-      - name: Build frontend
-        run: bun install && bun run build
-        working-directory: frontend
-      - name: Build binary
-        run: go build -ldflags="-s -w -X mercury/app.Version=${{ github.ref_name }}" -o mercury-linux-amd64 .
+
+      - name: Inject version into nfpm
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          sed -i "s/version: \"0.1.0\"/version: \"${VERSION}\"/" build/linux/nfpm/nfpm.yaml
+
+      - name: Build .deb package
+        run: wails3 task linux:create:deb VERSION=${{ github.ref_name }}
+
       - uses: actions/upload-artifact@v4
         with:
           name: mercury-linux-amd64
-          path: mercury-linux-amd64
+          path: bin/mercury*.deb
 
   build-macos:
     runs-on: macos-latest
@@ -165,17 +173,25 @@ jobs:
 
       - name: Install Wails v3
         run: go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+
       - name: Generate bindings
         run: wails3 generate bindings -ts -i -clean=true
-      - name: Build frontend
-        run: bun install && bun run build
-        working-directory: frontend
-      - name: Build
-        run: go build -ldflags="-s -w -X mercury/app.Version=${{ github.ref_name }}" -o mercury-windows-amd64.exe .
+
+      - name: Inject version into Windows metadata
+        shell: bash
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          sed -i "s/\"0.1.0\"/\"${VERSION}\"/g" build/windows/info.json
+          sed -i "s/version=\"0.1.0\"/version=\"${VERSION}\"/g" build/windows/wails.exe.manifest
+
+      - name: Build NSIS installer
+        run: wails3 task windows:package VERSION=${{ github.ref_name }}
+
       - uses: actions/upload-artifact@v4
         with:
           name: mercury-windows-amd64
-          path: mercury-windows-amd64.exe
+          path: build/windows/nsis/mercury-installer.exe
 
   release:
     runs-on: ubuntu-latest
