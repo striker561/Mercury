@@ -233,7 +233,7 @@ jobs:
           VERSION="${{ needs.validate-tag.outputs.version }}"
           sed -i "s/\"ProductVersion\": \"[^\"]*\"/\"ProductVersion\": \"${VERSION}\"/" build/windows/info.json
           sed -i "s/\"file_version\": \"[^\"]*\"/\"file_version\": \"${VERSION}\"/" build/windows/info.json
-          sed -i "s/version=\"[^\"]*\"/version=\"${VERSION}\"/" build/windows/wails.exe.manifest
+          sed -i "/assemblyIdentity/s/version=\"[^\"]*\"/version=\"${VERSION}\"/" build/windows/wails.exe.manifest
 
       - name: Build NSIS installer
         run: wails3 task windows:package VERSION=v${{ needs.validate-tag.outputs.version }}
