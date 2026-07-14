@@ -138,10 +138,10 @@ func Run(assets embed.FS) error {
 		paused := mercuryApp.TogglePause()
 		if paused {
 			refs.Pause.SetLabel("Resume Sync")
-			tray.SetTooltip("Mercury — Paused")
+			tray.SetTooltip("Mercury - Paused")
 		} else {
 			refs.Pause.SetLabel("Pause Sync")
-			tray.SetTooltip("Mercury — Running")
+			tray.SetTooltip("Mercury - Running")
 		}
 		updateTray(tray, refs, mercuryApp)
 	})

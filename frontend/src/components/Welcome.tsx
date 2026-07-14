@@ -28,7 +28,7 @@ export default function Welcome({ onGetStarted }: Props) {
         </div>
         <div className="welcome-step">
           <span className="welcome-step-num">3</span>
-          <span>Copy anything — it appears on your other machines</span>
+          <span>Copy anything. It appears on your other machines.</span>
         </div>
       </div>
       <div className="welcome-trust">
