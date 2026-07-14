@@ -66,6 +66,17 @@ jobs:
         run: bun install && bun run build
         working-directory: frontend
 
+      - name: Upload frontend build for reuse
+        run: |
+          cd frontend
+          tar czf ../frontend-build.tar.gz node_modules dist bindings
+        shell: bash
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend-build.tar.gz
+          retention-days: 1
+
   build-linux:
     runs-on: ubuntu-24.04
     needs: [validate-tag, test]
@@ -91,6 +102,13 @@ jobs:
         with:
           path: frontend/node_modules
           key: frontend-${{ hashFiles('frontend/bun.lock', 'frontend/bun.lockb', 'frontend/package.json') }}
+
+      - name: Download prebuilt frontend
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+      - name: Extract frontend
+        run: tar xzf frontend-build.tar.gz -C frontend
 
       - name: Install Wails v3 and nfpm
         run: |
@@ -143,6 +161,13 @@ jobs:
           path: frontend/node_modules
           key: frontend-${{ hashFiles('frontend/bun.lock', 'frontend/bun.lockb', 'frontend/package.json') }}
 
+      - name: Download prebuilt frontend
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+      - name: Extract frontend
+        run: tar xzf frontend-build.tar.gz -C frontend
+
       - name: Install Wails v3
         run: go install github.com/wailsapp/wails/v3/cmd/wails3@latest
 
@@ -189,12 +214,15 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Download prebuilt frontend
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+      - name: Extract frontend
+        run: tar xzf frontend-build.tar.gz -C frontend
+
       - name: Install Wails v3
         run: go install github.com/wailsapp/wails/v3/cmd/wails3@latest
-
-      - name: Clean stale node_modules (Windows file locking)
-        shell: bash
-        run: rm -rf frontend/node_modules
 
       - name: Generate bindings
         run: wails3 generate bindings -ts -i -clean=true
