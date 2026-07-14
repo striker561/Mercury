@@ -43,7 +43,7 @@ func NewMercuryApp() *MercuryApp {
 
 // GetVersion returns the app version string.
 func (m *MercuryApp) GetVersion() string {
-	return "0.1.0"
+	return Version
 }
 
 // SetPassphrase saves the passphrase and starts syncing.
@@ -147,7 +147,7 @@ func (m *MercuryApp) GetPeers() []map[string]string {
 //
 // Similarly, storage.DB.All() runs one SQL query, not one per key.
 func (m *MercuryApp) GetAllSettings() map[string]string {
-	out := map[string]string{"version": "0.1.0"}
+	out := map[string]string{"version": Version}
 	if m.db != nil {
 		s := m.db.All() // single SQL query, fills in defaults
 		for k, v := range s {
