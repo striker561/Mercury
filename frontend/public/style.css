@@ -148,6 +148,18 @@ textarea {
   .header-logo {
     filter: invert(1);
   }
+  .header-logo-active {
+    filter: invert(1) drop-shadow(0 0 6px var(--green-glow));
+  }
+}
+
+.header-logo-active {
+  animation: logo-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes logo-pulse {
+  0%, 100% { opacity: 0.9; }
+  50% { opacity: 1; filter: drop-shadow(0 0 6px var(--green-glow)); }
 }
 
 .header-title {

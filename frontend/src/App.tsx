@@ -19,7 +19,7 @@ function App() {
 
   useMercuryEvents(refresh);
 
-  const { peers, paused } = state;
+  const { peers, paused, transfers } = state;
   const dotClass = paused
     ? "status-dot paused"
     : peers.length > 0
@@ -31,6 +31,10 @@ function App() {
     : peers.length > 0
       ? copy.header.peers(peers.length)
       : copy.header.idle;
+
+  const isTransferring = transfers.some(
+    (t) => t.status === "sending" || t.status === "receiving"
+  );
 
   const handleGetStarted = useCallback(() => {
     setTab("settings");
@@ -60,18 +64,18 @@ function App() {
           <img
             src="/mercury-logo.png"
             alt=""
-            className="header-logo"
+            className={`header-logo${isTransferring ? " header-logo-active" : ""}`}
             aria-hidden
           />
           <span className="header-title">Mercury</span>
         </div>
         <div className="header-spacer" />
         <div className="header-actions">
-          <SegmentedControl active={tab} onChange={handleTabChange} />
           <div className="header-status">
             <span className={dotClass} aria-hidden />
             <span>{statusLabel}</span>
           </div>
+          <SegmentedControl active={tab} onChange={handleTabChange} />
           <button
             type="button"
             className="window-close"
