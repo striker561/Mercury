@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"mercury/app/backend/clipboard"
+	"mercury/app/backend/crypto"
 	"mercury/app/backend/fileinfo"
 	"mercury/app/backend/storage"
 	"mercury/app/services"
@@ -84,10 +85,19 @@ func (m *MercuryApp) startSync(passphrase string) {
 
 	// Wire the shared TCP listener: sync handles clipboard, transfer handles
 	// file chunks.  They don't know about each other — OnMessage is the glue.
+	//
+	// IMPORTANT: transport listener delivers RAW CIPHERTEXT for all message
+	// types.  Clipboard is decrypted by sync's event loop; file chunks must
+	// be decrypted here before feeding into the transfer manager.
 	key := services.DeriveKey(passphrase)
 	m.transSvc = services.NewTransferService(key)
 	m.syncSvc.SetOnMessage(func(msgType byte, payload []byte) {
-		m.transSvc.ChunkChan() <- payload
+		dec, err := crypto.Decrypt(payload, key)
+		if err != nil {
+			log.Printf("[mercury] decrypt chunk: %v", err)
+			return
+		}
+		m.transSvc.ChunkChan() <- dec
 	})
 	m.syncSvc.SetOnFileOffer(func(offerID, fileName string, fileSize int64, peerAddr string) {
 		// Use the sender's offer ID so file_accept maps back correctly.
