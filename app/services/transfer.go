@@ -46,6 +46,11 @@ func (s *TransferService) RejectOffer(offerID string) {
 	s.mgr.RejectOffer(offerID)
 }
 
+// NewOfferID returns a unique offer identifier.
+func (s *TransferService) NewOfferID() string {
+	return s.mgr.NewOfferID()
+}
+
 // StoreOutgoing remembers an offer we broadcast so we can send the file when accepted.
 func (s *TransferService) StoreOutgoing(offerID, filePath string) {
 	s.mgr.StoreOutgoing(offerID, filePath)

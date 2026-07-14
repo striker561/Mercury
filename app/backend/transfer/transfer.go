@@ -96,8 +96,8 @@ func (m *Manager) ChunkChan() chan<- []byte {
 	return m.chunkBuf
 }
 
-// newID returns a random hex identifier for offers and transfers.
-func (m *Manager) newID() string {
+// NewOfferID returns a random hex identifier for offers and transfers.
+func (m *Manager) NewOfferID() string {
 	b := make([]byte, 8)
 	rand.Read(b)
 	return hex.EncodeToString(b)
@@ -105,7 +105,7 @@ func (m *Manager) newID() string {
 
 // IncomingOffer stores an offer from the network and fires OnOffer.
 func (m *Manager) IncomingOffer(fileName string, fileSize int64, peerAddr string) Offer {
-	id := m.newID()
+	id := m.NewOfferID()
 	o := Offer{ID: id, FileName: fileName, FileSize: fileSize, PeerAddr: peerAddr}
 	m.mu.Lock()
 	m.offers[id] = &o
@@ -139,7 +139,7 @@ func (m *Manager) AcceptOffer(offerID, saveDir string) (string, error) {
 	delete(m.offers, offerID)
 	m.mu.Unlock()
 
-	tid := m.newID()
+	tid := m.NewOfferID()
 	p := &Progress{ID: tid, FileName: o.FileName, FileSize: o.FileSize, Status: StatusAccepting}
 	m.mu.Lock()
 	m.transfers[tid] = p
@@ -179,7 +179,7 @@ func (m *Manager) SendFile(peerAddr, filePath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("transfer: %w", err)
 	}
-	tid := m.newID()
+	tid := m.NewOfferID()
 	p := &Progress{ID: tid, FileName: filepath.Base(filePath), FileSize: fi.Size(), Status: StatusSending}
 	m.mu.Lock()
 	m.transfers[tid] = p

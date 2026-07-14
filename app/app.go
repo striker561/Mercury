@@ -113,8 +113,10 @@ func (m *MercuryApp) startSync(passphrase string) {
 			if fi, err := os.Stat(c.Text); err == nil && !fi.IsDir() {
 				name := filepath.Base(c.Text)
 				log.Printf("[mercury] detected file path: %s (%d bytes)", name, fi.Size())
-				offer := m.transSvc.IncomingOffer(name, fi.Size(), "")
-				m.transSvc.StoreOutgoing(offer.ID, c.Text)
+				// Generate an offer ID for outgoing tracking without adding it
+				// to the local offers list (the broadcast will show it on peers).
+				id := m.transSvc.NewOfferID()
+				m.transSvc.StoreOutgoing(id, c.Text)
 				m.syncSvc.BroadcastFileOffer(name, fi.Size())
 				return
 			}
