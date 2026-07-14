@@ -5,7 +5,9 @@ import (
 	"strings"
 )
 
-// vpnActive reports whether a VPN-style network interface is up.
+// vpnActive reports whether a known VPN client interface appears to be up.
+// Conservative on purpose: macOS always has utun* for system services — never
+// treat those as VPN.
 func vpnActive() bool {
 	ifaces, err := net.Interfaces()
 	if err != nil {
@@ -24,13 +26,30 @@ func vpnActive() bool {
 
 func isVPNInterface(name string) bool {
 	n := strings.ToLower(name)
-	for _, p := range []string{
-		"tun", "tap", "wg", "utun", "ppp", "ipsec", "vpn",
-		"windscribe", "nordlynx", "mullvad", "proton", "tailscale", "zerotier",
+
+	// Named VPN clients (interface name often includes the product).
+	for _, needle := range []string{
+		"windscribe", "nordlynx", "nordvpn", "mullvad", "proton",
+		"tailscale", "zerotier", "wireguard", "openvpn", "surfshark",
+		"expressvpn", "cyberghost", "pia-", "privateinternetaccess",
 	} {
-		if strings.HasPrefix(n, p) || strings.Contains(n, p) {
+		if strings.Contains(n, needle) {
 			return true
 		}
 	}
+
+	// WireGuard on Linux: wg0, wg1, …
+	if strings.HasPrefix(n, "wg") && len(n) >= 3 && n[2] >= '0' && n[2] <= '9' {
+		return true
+	}
+
+	// OpenVPN on Linux: tun0, tap0 (not utun — that prefix is macOS system).
+	if len(n) >= 4 && (strings.HasPrefix(n, "tun") || strings.HasPrefix(n, "tap")) {
+		suffix := n[3:]
+		if suffix == "" || (len(suffix) == 1 && suffix[0] >= '0' && suffix[0] <= '9') {
+			return !strings.HasPrefix(n, "utun")
+		}
+	}
+
 	return false
 }
