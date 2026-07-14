@@ -334,3 +334,10 @@ func (m *MercuryApp) GetTransferProgress() []services.FileProgress {
 	}
 	return m.transSvc.AllProgress()
 }
+
+// CancelTransfer cancels a running file transfer.
+func (m *MercuryApp) CancelTransfer(tid string) {
+	if m.transSvc != nil {
+		m.transSvc.CancelTransfer(tid)
+	}
+}

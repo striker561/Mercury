@@ -498,6 +498,44 @@ input[type="password"]::placeholder {
   font-variant-numeric: tabular-nums;
 }
 
+.transfer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.btn-cancel {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  color: var(--dim);
+  font-size: 10px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.btn-cancel:hover {
+  color: #e06c75;
+  border-color: #e06c75;
+}
+
+.bar-error {
+  background: #e06c75 !important;
+}
+
+.transfer-status.failed,
+.transfer-status.cancelled {
+  color: #e06c75;
+}
+
+.transfer-status.done {
+  color: #98c379;
+}
+
 /* ─── Advanced ─── */
 .btn-ghost {
   background: none;

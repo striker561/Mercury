@@ -17,6 +17,9 @@ import (
 func (m *Manager) sendFile(tid, peerAddr, filePath string, fileSize int64) {
 	failed := true
 	defer func() {
+		m.mu.Lock()
+		delete(m.cancel, tid)
+		m.mu.Unlock()
 		if failed {
 			m.updateStatus(tid, StatusFailed, 0)
 		}
@@ -24,6 +27,12 @@ func (m *Manager) sendFile(tid, peerAddr, filePath string, fileSize int64) {
 
 	log.Printf("[transfer] starting send %s to %s (%d bytes)", filepath.Base(filePath), peerAddr, fileSize)
 	m.updateStatus(tid, StatusSending, 0)
+
+	// Register cancel channel.
+	cancelCh := make(chan struct{})
+	m.mu.Lock()
+	m.cancel[tid] = cancelCh
+	m.mu.Unlock()
 
 	f, err := os.Open(filePath)
 	if err != nil {
@@ -35,6 +44,7 @@ func (m *Manager) sendFile(tid, peerAddr, filePath string, fileSize int64) {
 	addr := fmt.Sprintf("%s:%d", stripPort(peerAddr), transport.Port)
 	buf := make([]byte, chunkSize)
 	var total int64
+	startTime := time.Now()
 
 	// Progress ticker — update UI every 200ms.
 	progressTick := time.NewTicker(200 * time.Millisecond)
@@ -59,10 +69,22 @@ func (m *Manager) sendFile(tid, peerAddr, filePath string, fileSize int64) {
 			}
 			total += int64(n)
 
-			// Push progress to frontend periodically.
+			// Push progress to frontend periodically with speed.
 			select {
 			case <-progressTick.C:
+				elapsed := time.Since(startTime).Seconds()
+				if elapsed > 0 {
+					m.updateSpeed(tid, int64(float64(total)/elapsed))
+				}
 				m.updateStatus(tid, StatusSending, total)
+			default:
+			}
+
+			// Check for cancel.
+			select {
+			case <-cancelCh:
+				log.Printf("[transfer] send %s cancelled at %d/%d", filepath.Base(filePath), total, fileSize)
+				return
 			default:
 			}
 		}
@@ -77,5 +99,6 @@ func (m *Manager) sendFile(tid, peerAddr, filePath string, fileSize int64) {
 
 	failed = false
 	m.updateStatus(tid, StatusDone, fileSize)
+	m.updateSpeed(tid, 0)
 	log.Printf("[transfer] sent %s (%d bytes)", filepath.Base(filePath), fileSize)
 }

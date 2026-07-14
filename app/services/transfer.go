@@ -75,3 +75,8 @@ func (s *TransferService) SendFile(peerAddr, filePath string) (string, error) {
 func (s *TransferService) AllProgress() []FileProgress {
 	return s.mgr.AllProgress()
 }
+
+// CancelTransfer signals a running transfer to stop.
+func (s *TransferService) CancelTransfer(tid string) {
+	s.mgr.CancelTransfer(tid)
+}

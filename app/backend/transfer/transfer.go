@@ -52,11 +52,12 @@ const (
 
 // Progress contains live transfer state for the frontend.
 type Progress struct {
-	ID       string `json:"id"`
-	FileName string `json:"file_name"`
-	FileSize int64  `json:"file_size"`
-	Received int64  `json:"received"`
-	Status   Status `json:"status"`
+	ID        string `json:"id"`
+	FileName  string `json:"file_name"`
+	FileSize  int64  `json:"file_size"`
+	Received  int64  `json:"received"`
+	Speed     int64  `json:"speed"`   // bytes/sec, 0 when idle
+	Status    Status `json:"status"`
 }
 
 // ─── Manager ─────────────────────────────────────────────────────────
@@ -68,6 +69,7 @@ type Manager struct {
 	offers    map[string]*Offer // incoming offers (from network)
 	outgoing  map[string]string // our offers: offerID → filePath
 	transfers map[string]*Progress
+	cancel    map[string]chan struct{} // tid → close to cancel
 	nextID    atomic.Int64
 
 	chunkBuf chan []byte // decrypted chunks from sync listener
@@ -86,6 +88,7 @@ func NewManager(key []byte) *Manager {
 		offers:    make(map[string]*Offer),
 		outgoing:  make(map[string]string),
 		transfers: make(map[string]*Progress),
+		cancel:    make(map[string]chan struct{}),
 		chunkBuf:  make(chan []byte, 20),
 	}
 }
@@ -228,12 +231,32 @@ func (m *Manager) AllProgress() []Progress {
 	return out
 }
 
+// CancelTransfer signals a running transfer (send or receive) to stop.
+// The partial file is cleaned up on the receiving side.
+func (m *Manager) CancelTransfer(tid string) {
+	m.mu.Lock()
+	c, ok := m.cancel[tid]
+	m.mu.Unlock()
+	if ok {
+		close(c)
+	}
+}
+
 // updateStatus is a helper used by sendFile / receiveFile.
 func (m *Manager) updateStatus(tid string, s Status, received int64) {
 	m.mu.Lock()
 	if p, ok := m.transfers[tid]; ok {
 		p.Status = s
 		p.Received = received
+	}
+	m.mu.Unlock()
+}
+
+// updateSpeed stores the current transfer speed in bytes/sec.
+func (m *Manager) updateSpeed(tid string, speed int64) {
+	m.mu.Lock()
+	if p, ok := m.transfers[tid]; ok {
+		p.Speed = speed
 	}
 	m.mu.Unlock()
 }
