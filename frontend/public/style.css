@@ -116,7 +116,8 @@ textarea {
 /* ─── Header ─── */
 
 .header {
-  -webkit-app-region: drag;
+  --wails-draggable: drag;
+  --wails-non-client-region: caption;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -139,7 +140,7 @@ textarea {
 .header-logo {
   height: 22px;
   width: auto;
-  -webkit-app-region: no-drag;
+  --wails-draggable: no-drag;
   opacity: 0.9;
 }
 
@@ -164,7 +165,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: 8px;
-  -webkit-app-region: no-drag;
+  --wails-draggable: no-drag;
 }
 
 .header-status {
@@ -188,7 +189,7 @@ textarea {
 }
 
 .segmented-btn {
-  -webkit-app-region: no-drag;
+  --wails-draggable: no-drag;
   border: none;
   background: transparent;
   color: var(--segment-inactive-text);
@@ -216,7 +217,7 @@ textarea {
 /* ─── Window close ─── */
 
 .window-close {
-  -webkit-app-region: no-drag;
+  --wails-draggable: no-drag;
   width: 24px;
   height: 24px;
   border: none;
