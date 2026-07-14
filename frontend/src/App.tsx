@@ -21,10 +21,10 @@ function App() {
   const [version, setVersion] = useState("");
 
   useEffect(() => {
-    // Single IPC call loads version + all settings.
+    // One IPC call loads version + all settings.
     MercuryApp.GetAllSettings().then((s) => {
       if (!s) return;
-      setVersion(s["version"] ?? "0.1.0");
+      setVersion(s["version"] ?? "");
       setPassphrase(s[SETTINGS_KEYS.passphrase] ?? "");
       setSyncEnabled(s[SETTINGS_KEYS.syncEnabled] === "true");
       setAllowFiles(s[SETTINGS_KEYS.allowFiles] !== "false");
@@ -99,10 +99,10 @@ function App() {
             onClick={handlePassphraseSave}
             disabled={!passphrase}
           >
-            Save &amp; Enable Sync
+            Save
           </button>
           <button className="btn-secondary" onClick={handleToggleSync}>
-            {syncEnabled ? "Pause Sync" : "Resume Sync"}
+            {syncEnabled ? "Pause" : "Resume"}
           </button>
         </div>
       </section>
@@ -111,7 +111,7 @@ function App() {
       <section className="settings-section">
         <h2>Peers</h2>
         {peers.length === 0 ? (
-          <p className="settings-empty">No peers discovered yet</p>
+          <p className="settings-empty">No peers on network</p>
         ) : (
           <ul className="peer-list">
             {peers.map((peer, i) => (
@@ -132,7 +132,7 @@ function App() {
           <div className="folder-row">
             <span className="folder-path">{receivedFolder}</span>
             <button className="btn-secondary" disabled>
-              Change
+              Browse
             </button>
           </div>
         </div>

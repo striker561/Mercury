@@ -1,20 +1,30 @@
+/* ── Design System ──
+ * Mercury: dark, fluid, minimal. System fonts only — no web font
+ * dependency, no FOUT, no FOUC. Pure monochrome palette; the only
+ * colour is the glow of a connected peer.
+ */
 :root {
   --bg: #000000;
-  --surface: #111111;
-  --surface-2: #1a1a1a;
-  --text: #ffffff;
-  --text-muted: #666666;
-  --accent: #ffffff;
-  --accent-hover: #cccccc;
-  --green: #999999;
-  --border: #333333;
-  --radius: 8px;
+  --bg2: #0a0a0a;
+  --fg: #ffffff;
+  --fg2: #e0e0e0;
+  --dim: #888888;
+  --dim2: #555555;
+  --line: #1e1e1e;
+  --glow: #d4d4d4;
+  --track: #1a1a1a;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
 
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
     Arial, sans-serif;
+  font-size: 14px;
   color-scheme: dark;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 * {
@@ -27,71 +37,111 @@ html,
 body {
   height: 100%;
   background: var(--bg);
-  color: var(--text);
-  font-size: 14px;
-  line-height: 1.5;
+  color: var(--fg);
+  line-height: 1.6;
 }
 
-#app,
 #root {
   height: 100%;
 }
 
-/* ─── Settings Layout ─── */
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 2px;
+}
+
+/* ─── Layout ─── */
 .settings {
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 16px;
-  gap: 16px;
+  padding: 28px 24px;
+  gap: 28px;
   overflow-y: auto;
 }
 
+/* ─── Header ─── */
 .settings-header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border);
+  align-items: baseline;
+  gap: 10px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line);
 }
 
 .settings-header h1 {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--accent);
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--fg);
 }
 
 .settings-version {
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--dim2);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ─── Sections ─── */
 .settings-section {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .settings-section h2 {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
-  margin-bottom: 12px;
+  letter-spacing: 0.08em;
+  color: var(--dim2);
 }
 
+/* ─── Fields ─── */
 .settings-field {
-  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
 }
 
 .settings-field label {
-  display: block;
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-bottom: 4px;
+  font-size: 13px;
+  color: var(--dim);
+}
+
+/* ─── Inputs ─── */
+input[type="text"],
+input[type="password"] {
+  width: 100%;
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  color: var(--fg);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus {
+  border-color: var(--dim);
+  box-shadow: 0 0 0 1px var(--dim);
+}
+
+input[type="text"]::placeholder,
+input[type="password"]::placeholder {
+  color: var(--dim2);
 }
 
 .password-row {
@@ -99,86 +149,80 @@ body {
   gap: 8px;
 }
 
-.password-row input,
-.folder-row input,
-input[type="text"],
-input[type="password"] {
+.password-row input {
   flex: 1;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 8px 12px;
-  color: var(--text);
-  font-size: 14px;
-  outline: none;
-  transition: border-color 0.2s;
 }
 
-input:focus {
-  border-color: var(--accent);
+/* ─── Buttons ─── */
+.btn-primary {
+  background: var(--fg);
+  color: var(--bg);
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.btn-primary:hover {
+  opacity: 0.85;
+}
+.btn-primary:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 400;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.btn-secondary:hover {
+  border-color: var(--dim);
+  color: var(--fg2);
+}
+.btn-secondary:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
 }
 
 .btn-icon {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 8px 12px;
-  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  color: var(--dim);
   font-size: 12px;
+  font-family: inherit;
   cursor: pointer;
   white-space: nowrap;
+  transition:
+    border-color 0.2s ease,
+    color 0.2s ease;
 }
 
 .btn-icon:hover {
-  color: var(--text);
-  border-color: var(--accent);
+  border-color: var(--dim);
+  color: var(--fg);
 }
 
 .settings-actions {
   display: flex;
   gap: 8px;
-  margin-top: 12px;
-}
-
-.btn-primary {
-  background: var(--accent);
-  color: #000;
-  border: none;
-  border-radius: var(--radius);
-  padding: 8px 16px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.btn-primary:hover {
-  background: var(--accent-hover);
-}
-
-.btn-primary:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.btn-secondary {
-  background: var(--surface-2);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 8px 16px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: border-color 0.2s;
-}
-
-.btn-secondary:hover {
-  border-color: var(--accent);
-}
-
-.btn-secondary:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+  margin-top: 2px;
 }
 
 /* ─── Peer List ─── */
@@ -192,25 +236,36 @@ input:focus {
 .peer-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  background: var(--surface-2);
-  border-radius: var(--radius);
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg2);
+  border-radius: var(--radius-md);
   font-size: 13px;
+  color: var(--fg2);
 }
 
 .peer-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: var(--green);
+  background: var(--dim);
   flex-shrink: 0;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .settings-empty {
-  color: var(--text-muted);
+  color: var(--dim2);
   font-size: 13px;
-  font-style: italic;
 }
 
 /* ─── Folder ─── */
@@ -222,67 +277,69 @@ input:focus {
 
 .folder-path {
   flex: 1;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 8px 12px;
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
   font-size: 13px;
-  color: var(--text-muted);
-  font-family: monospace;
+  color: var(--dim);
+  font-family: "SF Mono", "Cascadia Code", "Fira Code", ui-monospace, monospace;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* ─── Toggle Switches ─── */
+/* ─── Toggles ─── */
 .toggle-row {
-  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0;
 }
 
 .toggle-label {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  width: 100%;
   cursor: pointer;
   font-size: 13px;
-  color: var(--text);
+  color: var(--fg2);
+  user-select: none;
 }
 
 .toggle {
   appearance: none;
   width: 36px;
-  height: 20px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  height: 22px;
+  background: var(--track);
+  border: none;
+  border-radius: 11px;
   cursor: pointer;
   position: relative;
-  transition:
-    background 0.2s,
-    border-color 0.2s;
+  transition: background 0.25s ease;
   flex-shrink: 0;
 }
 
 .toggle::after {
   content: "";
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 14px;
-  height: 14px;
-  background: var(--text-muted);
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  background: var(--dim2);
   border-radius: 50%;
   transition:
-    transform 0.2s,
-    background 0.2s;
+    transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+    background 0.25s ease;
 }
 
 .toggle:checked {
-  background: var(--text);
-  border-color: var(--text);
+  background: var(--fg);
 }
 
 .toggle:checked::after {
-  transform: translateX(16px);
+  transform: translateX(14px);
   background: var(--bg);
 }
