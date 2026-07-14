@@ -1,60 +1,132 @@
-import { useState, useEffect, useCallback } from "react";
+import { useCallback } from "react";
+import { File, Image as ImageIcon } from "@phosphor-icons/react";
 import { MercuryApp } from "../../bindings/mercury/app";
+import type { FileOffer, FileProgress } from "../types/mercury";
 
-function sz(b: number): string {
-  if (b < 1024) return b + " B";
-  if (b < 1048576) return (b / 1024).toFixed(0) + " KB";
-  return (b / 1048576).toFixed(1) + " MB";
+interface Props {
+  offers: FileOffer[];
+  transfers: FileProgress[];
+  onChange: () => void;
 }
-function spd(bps: number): string {
+
+function formatSize(b: number): string {
+  if (b < 1024) return `${b} B`;
+  if (b < 1048576) return `${Math.round(b / 1024)} KB`;
+  return `${(b / 1048576).toFixed(1)} MB`;
+}
+
+function formatSpeed(bps: number): string {
   if (bps <= 0) return "";
-  return bps < 1048576 ? (bps / 1024).toFixed(0) + " KB/s" : (bps / 1048576).toFixed(1) + " MB/s";
+  return bps < 1048576
+    ? `${Math.round(bps / 1024)} KB/s`
+    : `${(bps / 1048576).toFixed(1)} MB/s`;
 }
 
-export default function FileTransfer() {
-  const [offers, setOffers] = useState<any[]>([]);
-  const [xfers, setXfers] = useState<any[]>([]);
+function fileIcon(name: string) {
+  const lower = name.toLowerCase();
+  if (/\.(png|jpe?g|gif|webp|bmp|svg|heic)$/.test(lower)) {
+    return <ImageIcon size={18} className="transfer-icon" aria-hidden />;
+  }
+  return <File size={18} className="transfer-icon" aria-hidden />;
+}
 
-  useEffect(() => {
-    const load = () => {
-      MercuryApp.GetPendingFileOffers().then((o: any) => { if (o) setOffers(o); });
-      MercuryApp.GetTransferProgress().then((t: any) => { if (t) setXfers(t.filter((p: any) => p.status !== "done")); });
-    };
-    load();
-    const id = setInterval(load, 1000);
-    return () => clearInterval(id);
-  }, []);
+export default function FileTransfer({ offers, transfers, onChange }: Props) {
+  const accept = useCallback(
+    async (id: string) => {
+      await MercuryApp.AcceptFileOffer(id);
+      onChange();
+    },
+    [onChange],
+  );
 
-  const accept = useCallback((id: string) => { MercuryApp.AcceptFileOffer(id); setOffers(p => p.filter((o: any) => o.id !== id)); }, []);
-  const reject = useCallback((id: string) => { MercuryApp.RejectFileOffer(id); setOffers(p => p.filter((o: any) => o.id !== id)); }, []);
-  const cancel = useCallback((id: string) => { MercuryApp.CancelTransfer(id); setXfers(p => p.map((t: any) => t.id === id ? { ...t, status: "cancelled" } : t)); }, []);
+  const reject = useCallback(
+    async (id: string) => {
+      await MercuryApp.RejectFileOffer(id);
+      onChange();
+    },
+    [onChange],
+  );
 
-  if (!offers.length && !xfers.length) return null;
+  const cancel = useCallback(
+    async (id: string) => {
+      await MercuryApp.CancelTransfer(id);
+      onChange();
+    },
+    [onChange],
+  );
+
+  if (!offers.length && !transfers.length) return null;
 
   return (
     <div>
       <div className="section-label">Transfers</div>
-      {offers.map((o: any) => (
-        <div key={o.id} className="tc">
-          <div className="tfn">{o.file_name}</div>
-          <div className="tm">{sz(o.file_size)}</div>
-          <div className="ta">
-            <button className="btn btn-outline btn-sm" onClick={() => reject(o.id)}>Decline</button>
-            <button className="btn btn-primary btn-sm" onClick={() => accept(o.id)}>Accept</button>
+      {offers.map((offer) => (
+        <div key={offer.id} className="transfer-card">
+          <div className="transfer-header">
+            {fileIcon(offer.file_name)}
+            <div className="transfer-info">
+              <div className="transfer-name">{offer.file_name}</div>
+              <div className="transfer-meta">
+                {formatSize(offer.file_size)} · incoming
+              </div>
+            </div>
+          </div>
+          <div className="transfer-actions">
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={() => reject(offer.id)}
+            >
+              Decline
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => accept(offer.id)}
+            >
+              Accept
+            </button>
           </div>
         </div>
       ))}
-      {xfers.map((t: any) => {
-        const pct = t.file_size > 0 ? Math.min(100, (t.received / t.file_size) * 100) : 0;
+      {transfers.map((t) => {
+        const pct =
+          t.file_size > 0 ? Math.min(100, (t.received / t.file_size) * 100) : 0;
         const busy = t.status === "sending" || t.status === "receiving";
+        const failed = t.status === "failed" || t.status === "cancelled";
+
         return (
-          <div key={t.id} className="tc">
-            <div className="tfn">{t.file_name}</div>
-            {busy && <div className="pt"><div className={`pf ${t.status === "failed" || t.status === "cancelled" ? "red" : ""}`} style={{ width: `${pct}%` }} /></div>}
-            <div className="pf2">
-              <span className="pi">{sz(t.received)} / {sz(t.file_size)}{t.speed > 0 ? ` · ${spd(t.speed)}` : ""}</span>
-              {busy && <button className="btn btn-ghost btn-sm" onClick={() => cancel(t.id)}>Cancel</button>}
+          <div key={t.id} className="transfer-card">
+            <div className="transfer-header">
+              {fileIcon(t.file_name)}
+              <div className="transfer-info">
+                <div className="transfer-name">{t.file_name}</div>
+                <div className="transfer-meta">
+                  {formatSize(t.received)} / {formatSize(t.file_size)}
+                  {t.speed > 0 ? ` · ${formatSpeed(t.speed)}` : ""}
+                </div>
+              </div>
             </div>
+            {busy && (
+              <div className="progress-track">
+                <div
+                  className={`progress-fill${failed ? " failed" : ""}`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            )}
+            {busy && (
+              <div className="progress-footer">
+                <span className="progress-info">{Math.round(pct)}%</span>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => cancel(t.id)}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
           </div>
         );
       })}

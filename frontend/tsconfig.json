@@ -22,4 +22,7 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src", "bindings"],
+  "exclude": [
+    "bindings/github.com/wailsapp/wails/v3/pkg/services/notifications"
+  ]
 }
