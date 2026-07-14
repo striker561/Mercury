@@ -145,7 +145,9 @@ Pull requests that make me faster, cleaner, or more divine are welcome. Pull req
 
 ## License
 
-[GNU GPL v3](LICENSE). Free as in freedom. If you modify and distribute, your changes stay open too. Do not blame me if you paste something embarrassing across the office LAN. I delivered it faithfully. That is my job.
+[MPL 2.0](LICENSE). Free and open. If you modify my files and distribute your version, those specific files must stay open-source under the MPL 2.0 too. Otherwise, feel free to use my packages or bundle me with your own projects.
+
+Do not blame me if you paste something embarrassing across the office LAN. I delivered it faithfully. That is my job.
 
 ---
 
