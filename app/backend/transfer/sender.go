@@ -13,11 +13,10 @@ import (
 )
 
 // sendFile streams a file over the sync port as MsgFileChunk messages.
-// Each chunk is read from disk, encrypted, and sent via sync.SendMsg.
-// The receiver's sync listener demuxes by type byte and decrypts.
 func (m *Manager) sendFile(tid, peerAddr, filePath string, fileSize int64) {
 	defer m.updateStatus(tid, StatusFailed, 0) // overwritten on success
 
+	log.Printf("[transfer] starting send %s to %s (%d bytes)", filepath.Base(filePath), peerAddr, fileSize)
 	f, err := os.Open(filePath)
 	if err != nil {
 		log.Printf("[transfer] open %s: %v", filePath, err)

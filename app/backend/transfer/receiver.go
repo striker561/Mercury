@@ -8,11 +8,10 @@ import (
 )
 
 // receiveFile reads decrypted chunks from chunkBuf and writes them to disk.
-// The sync manager demuxes MsgFileChunk messages and decrypts them before
-// pushing onto chunkBuf — no separate listener needed.
 func (m *Manager) receiveFile(tid string, o *Offer, saveDir string) {
 	defer m.updateStatus(tid, StatusFailed, 0)
 
+	log.Printf("[transfer] receiving %s to %s", o.FileName, saveDir)
 	m.updateStatus(tid, StatusReceiving, 0)
 
 	if err := os.MkdirAll(saveDir, 0755); err != nil {

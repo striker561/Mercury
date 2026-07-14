@@ -15,6 +15,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -64,8 +65,8 @@ type Progress struct {
 type Manager struct {
 	key       []byte
 	mu        sync.Mutex
-	offers    map[string]*Offer    // incoming offers (from network)
-	outgoing  map[string]string   // our offers: offerID → filePath
+	offers    map[string]*Offer // incoming offers (from network)
+	outgoing  map[string]string // our offers: offerID → filePath
 	transfers map[string]*Progress
 	nextID    atomic.Int64
 
@@ -109,6 +110,7 @@ func (m *Manager) IncomingOffer(fileName string, fileSize int64, peerAddr string
 	m.mu.Lock()
 	m.offers[id] = &o
 	m.mu.Unlock()
+	log.Printf("[transfer] incoming offer: %s (%d bytes)", fileName, fileSize)
 	if m.OnOffer != nil {
 		m.OnOffer(o)
 	}
@@ -152,6 +154,7 @@ func (m *Manager) RejectOffer(offerID string) {
 	m.mu.Lock()
 	delete(m.offers, offerID)
 	m.mu.Unlock()
+	log.Printf("[transfer] rejected offer %s", offerID)
 }
 
 // StoreOutgoing remembers an offer we broadcast so we can send the file when accepted.

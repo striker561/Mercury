@@ -88,6 +88,7 @@ func (m *MercuryApp) startSync(passphrase string) {
 	// When a peer accepts our file offer, look up the file path and start sending.
 	m.syncSvc.SetOnFileAccept(func(offerID string) {
 		if fp := m.transSvc.AcceptNotification(offerID); fp != "" {
+			log.Printf("[mercury] offer %s accepted, sending %s", offerID, fp)
 			// Take first peer — in practice there's only one sender per offer.
 			peers := m.syncSvc.GetPeers()
 			if len(peers) > 0 {
@@ -111,13 +112,16 @@ func (m *MercuryApp) startSync(passphrase string) {
 			// If the text is a valid file path, offer it as a file transfer.
 			if fi, err := os.Stat(c.Text); err == nil && !fi.IsDir() {
 				name := filepath.Base(c.Text)
+				log.Printf("[mercury] detected file path: %s (%d bytes)", name, fi.Size())
 				offer := m.transSvc.IncomingOffer(name, fi.Size(), "")
 				m.transSvc.StoreOutgoing(offer.ID, c.Text)
 				m.syncSvc.BroadcastFileOffer(name, fi.Size())
 				return
 			}
+			log.Printf("[mercury] clipboard text: %d chars", len(c.Text))
 			m.syncSvc.BroadcastText(c.Text)
 		case clipboard.ChangeImage:
+			log.Printf("[mercury] clipboard image: %d bytes", len(c.Image))
 			m.syncSvc.BroadcastImage(c.Image)
 		}
 	})
@@ -247,6 +251,7 @@ func (m *MercuryApp) AcceptFileOffer(offerID string) string {
 		log.Printf("[mercury] accept offer: %v", err)
 		return ""
 	}
+	log.Printf("[mercury] accepted offer %s, transfer %s", offerID, tid)
 	// Tell the sender we accepted so they start streaming the file.
 	m.syncSvc.BroadcastFileAccept(offerID)
 	return tid
