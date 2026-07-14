@@ -32,7 +32,7 @@ function App() {
   return (
     <div className="settings">
       <div className="settings-header">
-        <h1>Mercury</h1>
+        <img src="/mercury-logo.png" alt="Mercury" className="mercury-logo" />
         <span className="settings-version">v{version}</span>
         <button
           className="btn-gear"

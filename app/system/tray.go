@@ -4,10 +4,15 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
+// MenuRefs holds live menu items so the caller can update labels/actions.
+type MenuRefs struct {
+	Status  *application.MenuItem
+	Pause   *application.MenuItem
+}
+
 // BuildMenu creates the right-click context menu for the system tray.
-// The menu items with dynamic labels (peer count, pause state) are returned
-// so the caller can update them later.
-func BuildMenu(app *application.App, showFn func()) *application.Menu {
+// Returns references to dynamic items so the caller can update them.
+func BuildMenu(app *application.App, showFn func()) (*application.Menu, *MenuRefs) {
 	menu := application.NewMenu()
 
 	// App name header (disabled)
@@ -25,14 +30,14 @@ func BuildMenu(app *application.App, showFn func()) *application.Menu {
 	menu.AddSeparator()
 
 	// Dynamic status item (disabled, shows peer count)
-	statusItem := menu.Add("● Connected (0 peers)").SetEnabled(false)
+	statusItem := menu.Add("● Idle (0 peers)").SetEnabled(false)
 
 	menu.AddSeparator()
 
 	// Pause/Resume toggle
 	pauseItem := menu.Add("Pause Sync")
 	pauseItem.OnClick(func(ctx *application.Context) {
-		// Will be wired in Phase 2
+		// Wired via app-level event binding in main.go
 	})
 
 	menu.AddSeparator()
@@ -43,10 +48,8 @@ func BuildMenu(app *application.App, showFn func()) *application.Menu {
 		app.Quit()
 	})
 
-	// Store references for dynamic updates.
-	// TODO: Wire status updates via event listeners in Phase 2.
-	_ = statusItem
-	_ = pauseItem
-
-	return menu
+	return menu, &MenuRefs{
+		Status: statusItem,
+		Pause:  pauseItem,
+	}
 }

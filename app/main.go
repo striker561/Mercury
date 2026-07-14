@@ -2,9 +2,11 @@ package app
 
 import (
 	"embed"
+	"fmt"
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"mercury/app/system"
 
@@ -86,11 +88,41 @@ func Run(assets embed.FS) error {
 	tray.SetIcon(trayIconWhite)
 
 	// Build the right-click context menu with an "Open Mercury" item.
-	menu := system.BuildMenu(app, func() {
+	menu, refs := system.BuildMenu(app, func() {
 		settingsWindow.Show()
 		settingsWindow.Focus()
 	})
 	tray.SetMenu(menu)
+
+	// Wire the pause/resume menu item.
+	refs.Pause.OnClick(func(ctx *application.Context) {
+		paused := mercuryApp.TogglePause()
+		if paused {
+			refs.Pause.SetLabel("Resume Sync")
+			tray.SetTooltip("Mercury — Paused")
+		} else {
+			refs.Pause.SetLabel("Pause Sync")
+			tray.SetTooltip("Mercury — Running")
+		}
+	})
+
+	// Update tray status periodically.
+	go func() {
+		for {
+			time.Sleep(5 * time.Second)
+			n := mercuryApp.GetPeerCount()
+			paused := mercuryApp.IsPaused()
+			var status string
+			if paused {
+				status = "⏸ Paused"
+			} else if n > 0 {
+				status = fmt.Sprintf("● Connected (%d peer%s)", n, map[bool]string{true: "", false: "s"}[n == 1])
+			} else {
+				status = "○ Idle (0 peers)"
+			}
+			refs.Status.SetLabel(status)
+		}
+	}()
 
 	// No automatic left-click toggle — the user opens the window from the
 	// context menu.  On Linux, right-click opens the menu via the native

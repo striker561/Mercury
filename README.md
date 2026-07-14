@@ -1,7 +1,7 @@
 # Mercury
 
 <p align="center">
-  <img src="frontend/public/mercury-icon.png" alt="Mercury logo" width="200"/>
+  <img src="frontend/public/mercury-logo.png" alt="Mercury logo" width="200"/>
 </p>
 
 > _"I carry messages. Yours, specifically. Across your LAN. Without the clouds, without the drama, and definitely without your data ending up in a database you didn't sign up for."_
