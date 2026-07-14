@@ -370,6 +370,10 @@ textarea {
   line-height: 1.45;
 }
 
+.status-bar-sub.warn {
+  color: var(--yellow);
+}
+
 /* ─── Password input ─── */
 
 .passphrase-wrap {

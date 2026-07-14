@@ -27,6 +27,8 @@ function normalize(raw: RawDashboardState): DashboardState {
     hasPassphrase: raw.hasPassphrase,
     offers: raw.offers ?? [],
     transfers: raw.transfers ?? [],
+    hint: raw.hint ?? "",
+    gnomeTrayTip: raw.gnomeTrayTip ?? false,
   };
 }
 

@@ -19,11 +19,12 @@ type Manager struct {
 	peerMap  *PeerMap
 	incoming chan []byte
 
-	mu        sync.Mutex
-	running   bool
-	cancel    context.CancelFunc
-	wg        sync.WaitGroup
-	onReceive OnReceiveCallback
+	mu           sync.Mutex
+	running      bool
+	cancel       context.CancelFunc
+	wg           sync.WaitGroup
+	onReceive    OnReceiveCallback
+	decryptFails int
 
 	// OnMessage, if set, is called for every message the listener receives
 	// that is NOT MsgClipboard.  The app layer uses this to route file
@@ -35,8 +36,8 @@ type Manager struct {
 // given passphrase.  Call Start to begin discovery and listening.
 func NewManager(passphrase string) *Manager {
 	return &Manager{
-		key:     crypto.DeriveKey(passphrase),
-		peerMap: NewPeerMap(),
+		key:      crypto.DeriveKey(passphrase),
+		peerMap:  NewPeerMap(),
 		incoming: make(chan []byte, 10),
 	}
 }
@@ -131,6 +132,7 @@ func (m *Manager) Restart(passphrase string) error {
 	m.key = crypto.DeriveKey(passphrase)
 	m.peerMap = NewPeerMap()
 	m.incoming = make(chan []byte, 10)
+	m.decryptFails = 0
 	m.mu.Unlock()
 
 	return m.Start()
@@ -204,6 +206,13 @@ func (m *Manager) Running() bool {
 	return m.running
 }
 
+// DecryptFailCount returns consecutive clipboard decrypt failures (wrong passphrase).
+func (m *Manager) DecryptFailCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.decryptFails
+}
+
 // eventLoop decrypts clipboard payloads and dispatches to onReceive.
 // File chunks are handled entirely by the app layer via OnMessage —
 // this event loop knows nothing about them.
@@ -215,11 +224,19 @@ func (m *Manager) eventLoop(ctx context.Context, added <-chan Peer) {
 		case <-ctx.Done():
 			return
 		case ciphertext := <-m.incoming:
-					decrypted, err := crypto.Decrypt(ciphertext, m.key)
+			decrypted, err := crypto.Decrypt(ciphertext, m.key)
 			if err != nil {
+				m.mu.Lock()
+				m.decryptFails++
+				m.mu.Unlock()
 				log.Printf("[sync] decrypt failed (wrong key?): %v", err)
-			} else if m.onReceive != nil {
-				m.onReceive(decrypted)
+			} else {
+				m.mu.Lock()
+				m.decryptFails = 0
+				m.mu.Unlock()
+				if m.onReceive != nil {
+					m.onReceive(decrypted)
+				}
 			}
 		case peer := <-added:
 			m.peerMap.AddOrUpdate(peer.ID, peer.Addr)

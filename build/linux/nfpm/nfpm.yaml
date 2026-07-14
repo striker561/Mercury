@@ -9,10 +9,10 @@ platform: "linux"
 version: "0.1.0"
 section: "default"
 priority: "extra"
-maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
+maintainer: "Mercury Contributors"
 description: "LAN Clipboard & File Sharing"
 vendor: "Mercury"
-homepage: "https://wails.io"
+homepage: "https://github.com/striker561/Mercury"
 license: "MIT"
 release: "1"
 
@@ -28,6 +28,10 @@ contents:
 depends:
   - libgtk-4-1
   - libwebkitgtk-6.0-4
+
+# Optional: GNOME system tray (AppIndicator). Mercury still works via the window.
+recommends:
+  - libayatana-appindicator3-1
 
 # Distribution-specific overrides for different package formats
 overrides:

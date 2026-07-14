@@ -127,6 +127,14 @@ func (s *SyncService) BroadcastImage(img []byte) {
 	s.manager.Broadcast(data)
 }
 
+// DecryptFailCount returns consecutive decrypt failures from peers.
+func (s *SyncService) DecryptFailCount() int {
+	if s.manager == nil {
+		return 0
+	}
+	return s.manager.DecryptFailCount()
+}
+
 // PeerCount returns the number of connected peers.
 func (s *SyncService) PeerCount() int {
 	return s.manager.PeerCount()

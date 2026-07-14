@@ -14,6 +14,8 @@ type DashboardState struct {
 	HasPassphrase bool                    `json:"hasPassphrase"`
 	Offers        []services.FileOffer    `json:"offers"`
 	Transfers     []services.FileProgress `json:"transfers"`
+	Hint          string                  `json:"hint"`
+	GnomeTrayTip  bool                    `json:"gnomeTrayTip"`
 }
 
 // GetDashboardState returns peers, sync status, offers, and transfers in one call.
@@ -42,7 +44,19 @@ func (m *MercuryApp) GetDashboardState() DashboardState {
 		HasPassphrase: m.GetSavedPassphrase() != "",
 		Offers:        offers,
 		Transfers:     active,
+		Hint:          m.dashboardHint(len(peers)),
+		GnomeTrayTip:  m.gnomeTray,
 	}
+}
+
+func (m *MercuryApp) dashboardHint(peerCount int) string {
+	if peerCount == 0 {
+		return ""
+	}
+	if m.syncSvc != nil && m.syncSvc.DecryptFailCount() >= 3 {
+		return "Passphrase may not match another device. Use the same secret in Settings on every machine."
+	}
+	return ""
 }
 
 // DashboardFingerprint returns a compact string used to detect UI-relevant changes.
@@ -59,7 +73,7 @@ func (m *MercuryApp) DashboardFingerprint() string {
 	for _, t := range s.Transfers {
 		fmt.Fprintf(&b, " t=%s:%s:%d", t.ID, t.Status, t.Received)
 	}
-	fmt.Fprintf(&b, " active=%v", m.trayActive())
+	fmt.Fprintf(&b, " hint=%q gnome=%v active=%v", s.Hint, s.GnomeTrayTip, m.trayActive())
 	return b.String()
 }
 

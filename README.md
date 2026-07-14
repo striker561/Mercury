@@ -123,11 +123,11 @@ mercury/
 
 ## Roadmap
 
-See [TODO.md](TODO.md) for current status. Remaining polish:
+See [TODO.md](TODO.md). v0.1.0 is feature-complete for real-world use — further work is feedback-driven.
 
-- Edge case UX (wrong passphrase, disconnect, oversized files)
-- Release builds for all platforms
-- Native folder picker (replacing zenity/osascript)
+### Linux packages
+
+`.deb` / `.rpm` packages declare runtime libraries in `depends:` (GTK4, WebKitGTK 6). **apt/dnf install those automatically** when you install Mercury. The `preinstall.sh` script does not install packages — it only warns if Mercury is already running during an upgrade. Optional GNOME tray support is listed as `recommends: libayatana-appindicator3-1`.
 
 ## Contributing
 

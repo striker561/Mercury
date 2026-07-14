@@ -27,6 +27,8 @@ export interface DashboardState {
   hasPassphrase: boolean;
   offers: FileOffer[];
   transfers: FileProgress[];
+  hint?: string;
+  gnomeTrayTip?: boolean;
 }
 
 export interface AppSettings {

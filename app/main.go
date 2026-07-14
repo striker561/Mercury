@@ -23,6 +23,9 @@ func Run(assets embed.FS) error {
 	isGNOME := detectGNOME()
 
 	mercuryApp := NewMercuryApp()
+	if isGNOME {
+		mercuryApp.SetGNOMETrayTip(true)
+	}
 
 	// Create notification service for OS-level file offer alerts.
 	// On macOS this requires a bundled .app with a valid CFBundleIdentifier

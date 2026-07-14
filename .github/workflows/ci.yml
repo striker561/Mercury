@@ -31,6 +31,9 @@ jobs:
       - name: Install Wails v3
         run: go install github.com/wailsapp/wails/v3/cmd/wails3@latest
 
+      - name: Generate bindings
+        run: wails3 generate bindings -ts -i -clean=true
+
       - name: Install frontend deps
         run: bun install
         working-directory: frontend
@@ -38,5 +41,12 @@ jobs:
       - name: Go vet
         run: go vet ./...
 
+      - name: Go test
+        run: go test $(go list ./... | grep -v '/clipboard$')
+
       - name: Go build
         run: go build ./...
+
+      - name: Frontend typecheck
+        run: bun run build
+        working-directory: frontend

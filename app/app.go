@@ -31,6 +31,7 @@ type MercuryApp struct {
 	notifySvc  *notifications.NotificationService
 	autostart  *application.AutostartManager
 	syncAt     time.Time // last clipboard sync activity
+	gnomeTray  bool      // GNOME detected — tray may need AppIndicator
 }
 
 // SetShowWindow registers a callback to show the settings window.
@@ -58,6 +59,11 @@ func (m *MercuryApp) HideWindow() {
 // SetNotifier stores the notification service for OS-level alerts.
 func (m *MercuryApp) SetNotifier(ns *notifications.NotificationService) {
 	m.notifySvc = ns
+}
+
+// SetGNOMETrayTip marks that the app is running under GNOME.
+func (m *MercuryApp) SetGNOMETrayTip(enabled bool) {
+	m.gnomeTray = enabled
 }
 
 // SetAutostartManager stores the OS autostart manager.
