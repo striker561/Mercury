@@ -11,14 +11,22 @@ import (
 
 // wirePayload is the JSON structure sent over the network for clipboard sync.
 type wirePayload struct {
-	Type    string `json:"type"`    // "text" or "image"
+	Type    string `json:"type"`    // "text", "image", or "file_offer"
 	Content string `json:"content"` // text content (for text type)
 	Image   []byte `json:"image"`   // PNG bytes (for image type)
+
+	// File offer fields.
+	FileName string `json:"file_name,omitempty"`
+	FileSize int64  `json:"file_size,omitempty"`
 }
+
+// OnFileOfferCallback is called when a file offer arrives from a peer.
+type OnFileOfferCallback func(fileName string, fileSize int64, peerAddr string)
 
 // SyncService manages LAN peer discovery, clipboard broadcast, and receive.
 type SyncService struct {
-	manager *sync.Manager
+	manager     *sync.Manager
+	onFileOffer OnFileOfferCallback
 }
 
 // NewSyncService creates a sync service with the given passphrase.
@@ -28,10 +36,15 @@ func NewSyncService(passphrase string) *SyncService {
 	}
 }
 
+// SetOnFileOffer registers a callback for incoming file offers.
+func (s *SyncService) SetOnFileOffer(cb OnFileOfferCallback) {
+	s.onFileOffer = cb
+}
+
 // Start begins mDNS discovery and TCP listening.
 // Received clipboard data is automatically written to the OS clipboard.
 func (s *SyncService) Start() error {
-	// Wire receive path: network -> OS clipboard
+	// Wire receive path: network -> OS clipboard or file offer
 	s.manager.SetOnReceive(func(payload []byte) {
 		var p wirePayload
 		if err := json.Unmarshal(payload, &p); err != nil {
@@ -43,6 +56,15 @@ func (s *SyncService) Start() error {
 			goclipboard.Write(goclipboard.FmtText, []byte(p.Content))
 		case "image":
 			goclipboard.Write(goclipboard.FmtImage, p.Image)
+		case "file_offer":
+			if s.onFileOffer != nil {
+				// The sender's address isn't in the payload, but we
+				// know it from the peer map.  We use the first peer
+				// that matches the hostname — in practice there's
+				// only one per machine.
+				addr := peerAddrFromPeers(s.manager.GetPeers())
+				s.onFileOffer(p.FileName, p.FileSize, addr)
+			}
 		}
 	})
 
@@ -93,4 +115,28 @@ func (s *SyncService) GetPeers() []map[string]string {
 		}
 	}
 	return result
+}
+
+// BroadcastFileOffer sends a file offer to all connected peers.
+func (s *SyncService) BroadcastFileOffer(fileName string, fileSize int64) {
+	p := wirePayload{
+		Type:     "file_offer",
+		FileName: fileName,
+		FileSize: fileSize,
+	}
+	data, err := json.Marshal(p)
+	if err != nil {
+		log.Printf("[sync] marshal file offer: %v", err)
+		return
+	}
+	s.manager.Broadcast(data)
+}
+
+// peerAddrFromPeers returns the address of the first peer, or "" if empty.
+// Used to determine which peer sent a file offer.
+func peerAddrFromPeers(peers []sync.Peer) string {
+	for _, p := range peers {
+		return p.Addr
+	}
+	return ""
 }

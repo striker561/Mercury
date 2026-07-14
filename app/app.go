@@ -5,6 +5,8 @@ import (
 
 	"mercury/app/backend/clipboard"
 	"mercury/app/backend/storage"
+	"mercury/app/backend/transfer"
+	"mercury/app/backend/sync"
 	"mercury/app/services"
 
 	goclipboard "golang.design/x/clipboard"
@@ -12,9 +14,10 @@ import (
 
 // MercuryApp is the main application struct exposed to the Wails frontend.
 type MercuryApp struct {
-	syncSvc *services.SyncService
-	clipSvc *services.ClipboardService
-	db      *storage.DB
+	syncSvc    *services.SyncService
+	clipSvc    *services.ClipboardService
+	db         *storage.DB
+	transferMgr *transfer.Manager
 }
 
 // NewMercuryApp creates a new MercuryApp instance and opens the settings DB.
@@ -75,6 +78,13 @@ func (m *MercuryApp) startSync(passphrase string) {
 		log.Printf("[mercury] sync start error: %v", err)
 		return
 	}
+
+	// Wire file transfer manager.
+	key := sync.DeriveKey(passphrase)
+	m.transferMgr = transfer.NewManager(key)
+	m.syncSvc.SetOnFileOffer(func(fileName string, fileSize int64, peerAddr string) {
+		m.transferMgr.IncomingOffer(fileName, fileSize, peerAddr)
+	})
 
 	m.clipSvc = services.NewClipboardService()
 	m.clipSvc.Start(func(c clipboard.Change) {
@@ -188,4 +198,59 @@ func (m *MercuryApp) GetReceivedFolder() string {
 // DetectGNOME returns true if running under GNOME desktop.
 func (m *MercuryApp) DetectGNOME() bool {
 	return false
+}
+
+// ─── File Transfer IPC ──────────────────────────────────────────────
+
+// GetPendingFileOffers returns all file offers that haven't been acted on.
+func (m *MercuryApp) GetPendingFileOffers() []transfer.Offer {
+	if m.transferMgr == nil {
+		return nil
+	}
+	return m.transferMgr.PendingOffers()
+}
+
+// AcceptFileOffer accepts an incoming file offer and starts receiving.
+func (m *MercuryApp) AcceptFileOffer(offerID string) string {
+	if m.transferMgr == nil {
+		return ""
+	}
+	saveDir := m.GetReceivedFolder()
+	if saveDir == "" {
+		saveDir = "~/Mercury"
+	}
+	tid, err := m.transferMgr.AcceptOffer(offerID, saveDir)
+	if err != nil {
+		log.Printf("[mercury] accept offer: %v", err)
+		return ""
+	}
+	return tid
+}
+
+// RejectFileOffer rejects an incoming file offer.
+func (m *MercuryApp) RejectFileOffer(offerID string) {
+	if m.transferMgr != nil {
+		m.transferMgr.RejectOffer(offerID)
+	}
+}
+
+// SendFile sends a file to a peer.  Returns the transfer ID.
+func (m *MercuryApp) SendFile(peerAddr, filePath string) string {
+	if m.transferMgr == nil {
+		return ""
+	}
+	tid, err := m.transferMgr.SendFile(peerAddr, filePath)
+	if err != nil {
+		log.Printf("[mercury] send file: %v", err)
+		return ""
+	}
+	return tid
+}
+
+// GetTransferProgress returns progress for all active transfers.
+func (m *MercuryApp) GetTransferProgress() []transfer.Progress {
+	if m.transferMgr == nil {
+		return nil
+	}
+	return m.transferMgr.AllProgress()
 }
