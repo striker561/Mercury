@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	"mercury/app/backend/crypto"
 	"mercury/app/backend/transport"
@@ -22,6 +23,8 @@ func (m *Manager) sendFile(tid, peerAddr, filePath string, fileSize int64) {
 	}()
 
 	log.Printf("[transfer] starting send %s to %s (%d bytes)", filepath.Base(filePath), peerAddr, fileSize)
+	m.updateStatus(tid, StatusSending, 0)
+
 	f, err := os.Open(filePath)
 	if err != nil {
 		log.Printf("[transfer] open %s: %v", filePath, err)
@@ -32,6 +35,10 @@ func (m *Manager) sendFile(tid, peerAddr, filePath string, fileSize int64) {
 	addr := fmt.Sprintf("%s:%d", stripPort(peerAddr), transport.Port)
 	buf := make([]byte, chunkSize)
 	var total int64
+
+	// Progress ticker — update UI every 200ms.
+	progressTick := time.NewTicker(200 * time.Millisecond)
+	defer progressTick.Stop()
 
 	// Read → encrypt → send loop.  One TCP conn per chunk (LAN; overhead is fine).
 	for total < fileSize {
@@ -51,6 +58,13 @@ func (m *Manager) sendFile(tid, peerAddr, filePath string, fileSize int64) {
 				return
 			}
 			total += int64(n)
+
+			// Push progress to frontend periodically.
+			select {
+			case <-progressTick.C:
+				m.updateStatus(tid, StatusSending, total)
+			default:
+			}
 		}
 		if rerr != nil {
 			if rerr != io.EOF {

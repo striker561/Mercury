@@ -33,6 +33,10 @@ func (m *Manager) receiveFile(tid string, o *Offer, saveDir string) {
 	defer f.Close()
 
 	var received int64
+	// Progress ticker — update UI every 200ms.
+	progressTick := time.NewTicker(200 * time.Millisecond)
+	defer progressTick.Stop()
+
 	// Chunks arrive already decrypted via sync → OnFileChunk → chunkBuf.
 	// Read until file is complete, with a 30s idle timeout.
 	timeout := time.NewTimer(30 * time.Second)
@@ -47,6 +51,14 @@ func (m *Manager) receiveFile(tid string, o *Offer, saveDir string) {
 			}
 			received += int64(len(chunk))
 			timeout.Reset(30 * time.Second) // got data, reset idle timer
+
+			// Push progress to frontend periodically.
+			select {
+			case <-progressTick.C:
+				m.updateStatus(tid, StatusReceiving, received)
+			default:
+			}
+
 		case <-timeout.C:
 			log.Printf("[transfer] timeout waiting for chunk (%d/%d)", received, o.FileSize)
 			return

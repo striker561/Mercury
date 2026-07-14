@@ -119,9 +119,22 @@ func Run(assets embed.FS) error {
 	// Update tray status periodically.
 	go func() {
 		for {
-			time.Sleep(5 * time.Second)
+			time.Sleep(2 * time.Second)
 			n := mercuryApp.GetPeerCount()
 			paused := mercuryApp.IsPaused()
+
+			// Check for active transfers — switch to active icon.
+			active := hasActiveTransfers(mercuryApp)
+			if active {
+				tray.SetTemplateIcon(trayIconActiveWhite)
+				tray.SetDarkModeIcon(trayIconActiveWhite)
+				tray.SetIcon(trayIconActiveWhite)
+			} else {
+				tray.SetTemplateIcon(trayIconWhite)
+				tray.SetDarkModeIcon(trayIconWhite)
+				tray.SetIcon(trayIconWhite)
+			}
+
 			var status string
 			if paused {
 				status = "⏸ Paused"
@@ -168,4 +181,14 @@ func detectGNOME() bool {
 	desktop := strings.ToLower(os.Getenv("XDG_CURRENT_DESKTOP"))
 	session := strings.ToLower(os.Getenv("GDMSESSION"))
 	return strings.Contains(desktop, "gnome") || strings.Contains(session, "gnome")
+}
+
+// hasActiveTransfers returns true when any transfer is in progress.
+func hasActiveTransfers(app *MercuryApp) bool {
+	for _, p := range app.GetTransferProgress() {
+		if p.Status == "sending" || p.Status == "receiving" {
+			return true
+		}
+	}
+	return false
 }
