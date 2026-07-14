@@ -2,8 +2,10 @@ package app
 
 import (
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"mercury/app/backend/clipboard"
 	"mercury/app/backend/storage"
@@ -14,10 +16,16 @@ import (
 
 // MercuryApp is the main application struct exposed to the Wails frontend.
 type MercuryApp struct {
-	syncSvc  *services.SyncService
-	clipSvc  *services.ClipboardService
-	db       *storage.DB
-	transSvc *services.TransferService
+	syncSvc     *services.SyncService
+	clipSvc     *services.ClipboardService
+	db          *storage.DB
+	transSvc    *services.TransferService
+	showWindow  func()
+}
+
+// SetShowWindow registers a callback to show the settings window.
+func (m *MercuryApp) SetShowWindow(fn func()) {
+	m.showWindow = fn
 }
 
 // NewMercuryApp creates a new MercuryApp instance and opens the settings DB.
@@ -82,8 +90,17 @@ func (m *MercuryApp) startSync(passphrase string) {
 	m.syncSvc.SetOnMessage(func(msgType byte, payload []byte) {
 		m.transSvc.ChunkChan() <- payload
 	})
-	m.syncSvc.SetOnFileOffer(func(fileName string, fileSize int64, peerAddr string) {
-		m.transSvc.IncomingOffer(fileName, fileSize, peerAddr)
+	m.syncSvc.SetOnFileOffer(func(offerID, fileName string, fileSize int64, peerAddr string) {
+		// Use the sender's offer ID so file_accept maps back correctly.
+		m.transSvc.IncomingOfferWithID(offerID, fileName, fileSize, peerAddr)
+		// Auto-accept if the setting is on.
+		if m.db != nil && m.db.GetDefaulted(storage.KeyAutoAccept) == "true" {
+			saveDir := m.GetReceivedFolder()
+			if saveDir == "" {
+				saveDir = "~/Mercury"
+			}
+			m.transSvc.AcceptOffer(offerID, saveDir)
+		}
 	})
 	// When a peer accepts our file offer, look up the file path and start sending.
 	m.syncSvc.SetOnFileAccept(func(offerID string) {
@@ -109,15 +126,22 @@ func (m *MercuryApp) startSync(passphrase string) {
 		}
 		switch c.Type {
 		case clipboard.ChangeText:
+			filePath := c.Text
+			// macOS Finder copies file:// URIs; Linux file managers often do too.
+			if strings.HasPrefix(filePath, "file://") {
+				if u, err := url.Parse(filePath); err == nil {
+					filePath = u.Path
+				}
+			}
 			// If the text is a valid file path, offer it as a file transfer.
-			if fi, err := os.Stat(c.Text); err == nil && !fi.IsDir() {
-				name := filepath.Base(c.Text)
+			if fi, err := os.Stat(filePath); err == nil && !fi.IsDir() {
+				name := filepath.Base(filePath)
 				log.Printf("[mercury] detected file path: %s (%d bytes)", name, fi.Size())
-				// Generate an offer ID for outgoing tracking without adding it
-				// to the local offers list (the broadcast will show it on peers).
+				// Generate an offer ID and broadcast it so the receiver uses the
+				// same ID — when they file_accept, we can look up the file path.
 				id := m.transSvc.NewOfferID()
-				m.transSvc.StoreOutgoing(id, c.Text)
-				m.syncSvc.BroadcastFileOffer(name, fi.Size())
+				m.transSvc.StoreOutgoing(id, filePath)
+				m.syncSvc.BroadcastFileOffer(id, name, fi.Size())
 				return
 			}
 			log.Printf("[mercury] clipboard text: %d chars", len(c.Text))

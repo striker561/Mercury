@@ -117,6 +117,19 @@ func (m *Manager) IncomingOffer(fileName string, fileSize int64, peerAddr string
 	return o
 }
 
+// IncomingOfferWithID stores an offer using the sender's offer ID (no new ID generated).
+func (m *Manager) IncomingOfferWithID(offerID, fileName string, fileSize int64, peerAddr string) Offer {
+	o := Offer{ID: offerID, FileName: fileName, FileSize: fileSize, PeerAddr: peerAddr}
+	m.mu.Lock()
+	m.offers[offerID] = &o
+	m.mu.Unlock()
+	log.Printf("[transfer] incoming offer (sender's ID): %s (%d bytes)", fileName, fileSize)
+	if m.OnOffer != nil {
+		m.OnOffer(o)
+	}
+	return o
+}
+
 // PendingOffers returns all offers that haven't been acted on.
 func (m *Manager) PendingOffers() []Offer {
 	m.mu.Lock()

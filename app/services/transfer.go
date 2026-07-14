@@ -31,6 +31,11 @@ func (s *TransferService) IncomingOffer(fileName string, fileSize int64, peerAdd
 	return s.mgr.IncomingOffer(fileName, fileSize, peerAddr)
 }
 
+// IncomingOfferWithID registers a file offer using the sender's offer ID.
+func (s *TransferService) IncomingOfferWithID(offerID, fileName string, fileSize int64, peerAddr string) FileOffer {
+	return s.mgr.IncomingOfferWithID(offerID, fileName, fileSize, peerAddr)
+}
+
 // PendingOffers returns all offers not yet acted on.
 func (s *TransferService) PendingOffers() []FileOffer {
 	return s.mgr.PendingOffers()

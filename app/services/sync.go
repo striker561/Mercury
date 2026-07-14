@@ -23,7 +23,7 @@ type wirePayload struct {
 }
 
 // OnFileOfferCallback is called when a file offer arrives from a peer.
-type OnFileOfferCallback func(fileName string, fileSize int64, peerAddr string)
+type OnFileOfferCallback func(offerID, fileName string, fileSize int64, peerAddr string)
 
 // OnFileAcceptCallback is called when a remote peer accepts our file offer.
 type OnFileAcceptCallback func(offerID string)
@@ -89,7 +89,7 @@ func (s *SyncService) Start() error {
 			log.Printf("[sync] received file offer: %s (%d bytes)", p.FileName, p.FileSize)
 			if s.onFileOffer != nil {
 				addr := peerAddrFromPeers(s.manager.GetPeers())
-				s.onFileOffer(p.FileName, p.FileSize, addr)
+				s.onFileOffer(p.OfferID, p.FileName, p.FileSize, addr)
 			}
 		case "file_accept":
 			log.Printf("[sync] received file accept: %s", p.OfferID)
@@ -149,9 +149,10 @@ func (s *SyncService) GetPeers() []map[string]string {
 }
 
 // BroadcastFileOffer sends a file offer to all connected peers.
-func (s *SyncService) BroadcastFileOffer(fileName string, fileSize int64) {
+func (s *SyncService) BroadcastFileOffer(offerID, fileName string, fileSize int64) {
 	p := wirePayload{
 		Type:     "file_offer",
+		OfferID:  offerID,
 		FileName: fileName,
 		FileSize: fileSize,
 	}

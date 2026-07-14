@@ -18,6 +18,8 @@ func Run(assets embed.FS) error {
 	// Detect if running under GNOME (tray may not work without AppIndicator).
 	isGNOME := detectGNOME()
 
+	mercuryApp := NewMercuryApp()
+
 	app := application.New(application.Options{
 		Name:        "Mercury",
 		Description: "LAN Clipboard & File Sharing",
@@ -25,7 +27,7 @@ func Run(assets embed.FS) error {
 			Handler: application.AssetFileServerFS(assets),
 		},
 		Services: []application.Service{
-			application.NewService(NewMercuryApp()),
+			application.NewService(mercuryApp),
 		},
 		Mac: application.MacOptions{
 			ActivationPolicy: application.ActivationPolicyAccessory,
@@ -44,8 +46,19 @@ func Run(assets embed.FS) error {
 		Hidden:           true,
 		MinWidth:         400,
 		MinHeight:        500,
+		HideOnEscape:     true,
 		BackgroundColour: application.NewRGB(18, 18, 18),
 		URL:              "/",
+		Windows: application.WindowsWindow{
+			HiddenOnTaskbar: true,
+		},
+	})
+
+	// Hide instead of close — we're a tray app, closing should keep us running.
+	settingsWindow.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
+		log.Println("[mercury] window closing → hiding to tray")
+		settingsWindow.Hide()
+		e.Cancel()
 	})
 
 	if isGNOME {
@@ -54,17 +67,24 @@ func Run(assets embed.FS) error {
 		settingsWindow.Show()
 	}
 
+	// Wire window show so file offers can pop open the settings.
+	mercuryApp.SetShowWindow(func() { settingsWindow.Show() })
+
 	// Create the system tray with an icon (required on macOS — without one,
 	// the tray item is invisible in the menu bar).
 	tray := app.SystemTray.New()
 	tray.SetTemplateIcon(trayIcon)
 
-	// Build the right-click context menu.
-	menu := system.BuildMenu(app)
+	// Build the right-click context menu with an "Open Mercury" item.
+	menu := system.BuildMenu(app, func() {
+		settingsWindow.Show()
+		settingsWindow.Focus()
+	})
 	tray.SetMenu(menu)
 
-	// Attach settings window to tray — left click toggles it.
-	tray.AttachWindow(settingsWindow)
+	// No automatic left-click toggle — the user opens the window from the
+	// context menu.  On Linux, right-click opens the menu via the native
+	// SecondaryActivate fallback (menu is set, so the menu appears).
 
 	// Register application event listeners.
 	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(event *application.ApplicationEvent) {

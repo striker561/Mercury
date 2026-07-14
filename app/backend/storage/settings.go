@@ -11,6 +11,7 @@ const (
 	KeyAllowFiles     = "allow_files"
 	KeyReceivedFolder = "received_folder"
 	KeyAutostart      = "autostart"
+	KeyAutoAccept     = "auto_accept"
 )
 
 // defaultValues holds the fallback for every known setting.
@@ -21,6 +22,7 @@ var defaultValues = map[string]string{
 	KeyAllowFiles:     "true",
 	KeyReceivedFolder: "~/Mercury/",
 	KeyAutostart:      "false",
+	KeyAutoAccept:     "false",
 }
 
 // AllKeys returns every registered setting key.

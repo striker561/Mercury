@@ -7,11 +7,20 @@ import (
 // BuildMenu creates the right-click context menu for the system tray.
 // The menu items with dynamic labels (peer count, pause state) are returned
 // so the caller can update them later.
-func BuildMenu(app *application.App) *application.Menu {
+func BuildMenu(app *application.App, showFn func()) *application.Menu {
 	menu := application.NewMenu()
 
 	// App name header (disabled)
 	menu.Add("Mercury").SetEnabled(false)
+
+	menu.AddSeparator()
+
+	// Open the settings window
+	menu.Add("Open Mercury").OnClick(func(ctx *application.Context) {
+		if showFn != nil {
+			showFn()
+		}
+	})
 
 	menu.AddSeparator()
 

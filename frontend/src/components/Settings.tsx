@@ -8,6 +8,7 @@ const KEYS = {
   allowFiles: "allow_files",
   receivedFolder: "received_folder",
   autostart: "autostart",
+  autoAccept: "auto_accept",
 };
 
 export default function Settings() {
@@ -16,6 +17,7 @@ export default function Settings() {
   const [syncEnabled, setSyncEnabled] = useState(false);
   const [allowFiles, setAllowFiles] = useState(true);
   const [autostart, setAutostart] = useState(false);
+  const [autoAccept, setAutoAccept] = useState(false);
   const [receivedFolder, setReceivedFolder] = useState("~/Mercury/");
 
   useEffect(() => {
@@ -25,6 +27,7 @@ export default function Settings() {
       setSyncEnabled(s[KEYS.syncEnabled] === "true");
       setAllowFiles(s[KEYS.allowFiles] !== "false");
       setAutostart(s[KEYS.autostart] === "true");
+      setAutoAccept(s[KEYS.autoAccept] === "true");
       setReceivedFolder(s[KEYS.receivedFolder] ?? "~/Mercury/");
     });
   }, []);
@@ -50,6 +53,12 @@ export default function Settings() {
     const next = !autostart;
     setAutostart(next);
     MercuryApp.SetSetting(KEYS.autostart, next ? "true" : "false");
+  };
+
+  const handleToggleAutoAccept = () => {
+    const next = !autoAccept;
+    setAutoAccept(next);
+    MercuryApp.SetSetting(KEYS.autoAccept, next ? "true" : "false");
   };
 
   return (
@@ -108,6 +117,18 @@ export default function Settings() {
               className="toggle"
               checked={allowFiles}
               onChange={handleToggleFiles}
+            />
+          </label>
+        </div>
+        <div className={`toggle-row ${!allowFiles ? "toggle-disabled" : ""}`}>
+          <label className="toggle-label">
+            <span>Auto-accept files</span>
+            <input
+              type="checkbox"
+              className="toggle"
+              checked={autoAccept}
+              disabled={!allowFiles}
+              onChange={handleToggleAutoAccept}
             />
           </label>
         </div>
