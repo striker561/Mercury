@@ -10,11 +10,11 @@ import (
 	syncpkg "mercury/app/backend/sync"
 )
 
-// sendFile streams a file by sending each encrypted chunk as a MsgFileChunk
-// message over the sync port.  The receiver's sync listener demuxes file
-// chunks to the transfer manager.
+// sendFile streams a file over the sync port as MsgFileChunk messages.
+// Each chunk is read from disk, encrypted, and sent via sync.SendMsg.
+// The receiver's sync listener demuxes by type byte and decrypts.
 func (m *Manager) sendFile(tid, peerAddr, filePath string, fileSize int64) {
-	defer m.updateStatus(tid, StatusFailed, 0)
+	defer m.updateStatus(tid, StatusFailed, 0) // overwritten on success
 
 	f, err := os.Open(filePath)
 	if err != nil {
@@ -27,6 +27,7 @@ func (m *Manager) sendFile(tid, peerAddr, filePath string, fileSize int64) {
 	buf := make([]byte, chunkSize)
 	var total int64
 
+	// Read → encrypt → send loop.  One TCP conn per chunk (LAN; overhead is fine).
 	for total < fileSize {
 		n, rerr := f.Read(buf)
 		if n > 0 {

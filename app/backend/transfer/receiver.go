@@ -29,8 +29,8 @@ func (m *Manager) receiveFile(tid string, o *Offer, saveDir string) {
 	defer f.Close()
 
 	var received int64
-	// Chunks arrive already decrypted via the sync manager's OnFileChunk
-	// callback.  We read from chunkBuf until the file is complete.
+	// Chunks arrive already decrypted via sync → OnFileChunk → chunkBuf.
+	// Read until file is complete, with a 30s idle timeout.
 	timeout := time.NewTimer(30 * time.Second)
 	defer timeout.Stop()
 
@@ -42,8 +42,7 @@ func (m *Manager) receiveFile(tid string, o *Offer, saveDir string) {
 				return
 			}
 			received += int64(len(chunk))
-			// Reset the timeout on each successful chunk.
-			timeout.Reset(30 * time.Second)
+			timeout.Reset(30 * time.Second) // got data, reset idle timer
 		case <-timeout.C:
 			log.Printf("[transfer] timeout waiting for chunk (%d/%d)", received, o.FileSize)
 			return

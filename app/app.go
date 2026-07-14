@@ -12,9 +12,9 @@ import (
 
 // MercuryApp is the main application struct exposed to the Wails frontend.
 type MercuryApp struct {
-	syncSvc *services.SyncService
-	clipSvc *services.ClipboardService
-	db      *storage.DB
+	syncSvc  *services.SyncService
+	clipSvc  *services.ClipboardService
+	db       *storage.DB
 	transSvc *services.TransferService
 }
 
@@ -73,7 +73,8 @@ func (m *MercuryApp) startSync(passphrase string) {
 
 	m.syncSvc = services.NewSyncService(passphrase)
 
-	// Wire file chunk routing: sync listener → transfer service.
+	// Wire sync → transfer: decrypted file chunks flow through a channel,
+	// file offers are forwarded directly to the transfer service.
 	key := services.DeriveKey(passphrase)
 	m.transSvc = services.NewTransferService(key)
 	m.syncSvc.SetOnFileChunk(func(chunk []byte) {

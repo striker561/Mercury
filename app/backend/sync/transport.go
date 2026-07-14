@@ -123,6 +123,8 @@ func handleConnection(conn net.Conn, incoming chan<- []byte, fileChunks chan<- [
 		log.Printf("[sync] clipboard payload too large: %d", payloadLen)
 		return
 	}
+	// Safety cap: 10 MB per message (file chunks are 256 KB each,
+	// clipboard is <25 MB but we check above for type 0).
 	if payloadLen > 10*1024*1024 {
 		log.Printf("[sync] payload too large: %d", payloadLen)
 		return

@@ -1,3 +1,5 @@
+// Package services — business logic layer between the Wails frontend
+// and the backend engines.  TransferService wraps transfer.Manager.
 package services
 
 import (
@@ -8,7 +10,7 @@ import (
 type FileOffer = transfer.Offer
 type FileProgress = transfer.Progress
 
-// TransferService wraps file offer/accept/reject/transfer logic.
+// TransferService wraps file transfer: offers, accept/reject, streaming.
 // Backend: transfer.Manager.
 type TransferService struct {
 	mgr *transfer.Manager

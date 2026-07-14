@@ -1,18 +1,14 @@
 // Package transfer handles peer-to-peer file transfer.
 //
 // Flow:
-//  1. Sender broadcasts a file offer (name + size + id) via the clipboard sync
-//     channel (encrypted metadata only).
-//  2. Receiver presents the offer to the user (accept / decline).
-//  3. If accepted, sender opens a TCP connection to the receiver's transfer
-//     port and streams the file in 256 KiB encrypted chunks.
-//  4. Receiver writes chunks to disk in the configured save directory.
+//  1. Offer (name+size+id) broadcast via sync channel
+//  2. User accepts → receiver goroutine starts, reads from chunkBuf
+//  3. Sender encrypts 256 KiB chunks, sends each via sync.SendMsg(MsgFileChunk)
+//  4. Sync listener demuxes by type byte, decrypts, pushes to chunkBuf
+//  5. Receiver writes chunks to disk
 //
-// Wire format (same length-prefixed scheme as sync):
-//
-//	[4 byte BE length][encrypted chunk]  ...
-//
-// Encryption reuses the same AES-256-GCM key derived from the sync passphrase.
+// Wire: same port (47821), same AES-256-GCM key as clipboard sync,
+// but with MsgFileChunk type byte so the listener routes to us.
 package transfer
 
 import (

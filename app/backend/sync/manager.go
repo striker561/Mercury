@@ -33,8 +33,8 @@ type Manager struct {
 // given passphrase.  Call Start to begin discovery and listening.
 func NewManager(passphrase string) *Manager {
 	return &Manager{
-		key:     DeriveKey(passphrase),
-		peerMap: NewPeerMap(),
+		key:        DeriveKey(passphrase),
+		peerMap:    NewPeerMap(),
 		incoming:   make(chan []byte, 10),
 		fileChunks: make(chan []byte, 20),
 	}
@@ -194,6 +194,8 @@ func (m *Manager) Running() bool {
 	return m.running
 }
 
+// eventLoop is the central demux: decrypts clipboard payloads and file chunks,
+// then dispatches them to the registered callbacks (onReceive / onFileChunk).
 func (m *Manager) eventLoop(ctx context.Context, added <-chan Peer) {
 	defer m.wg.Done()
 
@@ -202,6 +204,7 @@ func (m *Manager) eventLoop(ctx context.Context, added <-chan Peer) {
 		case <-ctx.Done():
 			return
 		case ciphertext := <-m.incoming:
+			// Clipboard payload: decrypt → onReceive (writes OS clipboard).
 			decrypted, err := Decrypt(ciphertext, m.key)
 			if err != nil {
 				log.Printf("[sync] decrypt failed (wrong key?): %v", err)
@@ -209,6 +212,7 @@ func (m *Manager) eventLoop(ctx context.Context, added <-chan Peer) {
 				m.onReceive(decrypted)
 			}
 		case chunk := <-m.fileChunks:
+			// File chunk: decrypt → onFileChunk (feeds transfer chunkBuf).
 			decrypted, err := Decrypt(chunk, m.key)
 			if err != nil {
 				log.Printf("[sync] file chunk decrypt failed: %v", err)
@@ -216,6 +220,7 @@ func (m *Manager) eventLoop(ctx context.Context, added <-chan Peer) {
 				m.onFileChunk(decrypted)
 			}
 		case peer := <-added:
+			// New peer discovered via mDNS → add to peer map.
 			m.peerMap.AddOrUpdate(peer.ID, peer.Addr)
 		}
 	}
