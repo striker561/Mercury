@@ -54,8 +54,10 @@ func Run(assets embed.FS) error {
 		settingsWindow.Show()
 	}
 
-	// Create the system tray.
+	// Create the system tray with an icon (required on macOS — without one,
+	// the tray item is invisible in the menu bar).
 	tray := app.SystemTray.New()
+	tray.SetTemplateIcon(trayIcon)
 
 	// Build the right-click context menu.
 	menu := system.BuildMenu(app)
