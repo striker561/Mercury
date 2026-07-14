@@ -93,14 +93,24 @@ jobs:
           bun-version: latest
       - name: Install Wails v3
         run: go install github.com/wailsapp/wails/v3/cmd/wails3@latest
-      - name: Build universal binary
-        run: wails3 task darwin:build:universal VERSION=${{ github.ref_name }}
-      - name: Copy binary
-        run: cp bin/mercury mercury-macos-universal
+      - name: Inject version into Info.plist
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          sed -i '' "s/<string>0.1.0<\/string>/<string>${VERSION}<\/string>/g" build/darwin/Info.plist
+      - name: Package into .app bundle
+        run: wails3 task darwin:package:universal VERSION=${{ github.ref_name }}
+      - name: Create DMG
+        run: |
+          hdiutil create \
+            -volname "Mercury" \
+            -srcfolder "bin/Mercury.app" \
+            -ov -format UDZO \
+            mercury-macos-universal.dmg
       - uses: actions/upload-artifact@v4
         with:
           name: mercury-macos-universal
-          path: mercury-macos-universal
+          path: mercury-macos-universal.dmg
 
   build-windows:
     runs-on: windows-latest
