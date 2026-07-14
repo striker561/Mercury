@@ -83,8 +83,10 @@ func Run(assets embed.FS) error {
 	})
 
 	if isGNOME {
-		log.Println("[mercury] GNOME detected — tray may need AppIndicator extension")
-		// On GNOME without AppIndicator, show settings window on startup.
+		log.Println("[mercury] GNOME detected — showing window at startup")
+		log.Println("[mercury]   tip: install gnome-shell-extension-appindicator for tray support")
+		// On GNOME without AppIndicator, show settings window on startup so
+		// the user can still use Mercury even without a visible tray icon.
 		settingsWindow.Show()
 	}
 

@@ -45,18 +45,26 @@ _Even gods have a to-do list. Ours is shorter than most._
 - [x] Transfer progress and status tracking
 - [x] OS notifications on file offer (macOS bundled, Linux D-Bus)
 
-## 🔄 Phase 5 — Polish (in progress)
+## ✅ Phase 5 — Polish
 
-- [x] Tray icons (Mercury logo with active state)
+- [x] Tray icons (Mercury logo with idle + active state, dark/light theme)
 - [x] Window close → hide to tray (not quit)
-- [x] Settings as full-page overlay
-- [x] Fixed window size (no resize)
+- [x] Full-page settings view with gear toggle
+- [x] Fixed window size 380×520, frameless, always-on-top
 - [x] Tray menu wired (pause/resume, peer count, tooltip)
-- [x] Autostart setting stored (wiring to OS pending)
+- [x] Autostart wired to OS via Wails AutostartManager
 - [x] macOS notification service skips dev mode gracefully
+- [x] Cancel transfers + partial file cleanup
+- [x] Transfer speed (MB/s) + live progress bar (200ms tick)
+- [x] Optimistic UI updates (accept/reject/cancel immediate)
+- [x] Active tray icon on clipboard sync (flashes 2s)
+- [x] Welcome/intro screen for first-run
+- [x] Folder picker dialog (zenity/osascript)
+- [x] Phosphor icons, redesigned dark UI
+- [x] Right-click disabled in webview
+- [x] CI workflow (push/PR) + Release workflow (tagged)
+- [x] GNOME detection with actionable tip
 - [ ] Edge case handling (disconnect, oversized files, wrong key)
-- [ ] Linux GNOME AppIndicator detection message
-- [ ] Release builds for all platforms
 - [ ] Light/dark theme support for UI
 
 ## Maybe Someday
