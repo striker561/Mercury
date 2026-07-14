@@ -84,13 +84,13 @@ func (w *Watcher) OnChange(cb func(Change)) {
 }
 
 // Start begins polling the clipboard. Blocks until ctx is cancelled.
-// Callbacks fire synchronously within this goroutine.
 func (w *Watcher) Start(ctx context.Context) {
 	if w.onChange == nil {
 		log.Println("[clipboard] no callback registered, watcher idle")
 		return
 	}
 
+	// Read initial state so we don't fire on what's already there.
 	w.mu.Lock()
 	w.prevText = w.reader.ReadText()
 	w.prevImage = w.reader.ReadImage()
@@ -111,48 +111,55 @@ func (w *Watcher) Start(ctx context.Context) {
 }
 
 // poll checks the clipboard for changes with debounce.
-// Callbacks fire synchronously — the caller's goroutine owns the timing.
 func (w *Watcher) poll() {
 	w.mu.Lock()
+	defer w.mu.Unlock()
 
 	if w.paused {
-		w.mu.Unlock()
 		return
 	}
 
 	now := time.Now()
 	if now.Sub(w.lastEvent) < w.debounceDur {
-		w.mu.Unlock()
 		return
 	}
 
-	text := w.reader.ReadText()
-	img := w.reader.ReadImage()
+	// On macOS, first check if file paths are on the pasteboard (Finder
+	// copies files using NSFilenamesPboardType / NSPasteboardTypeFileURL
+	// which the text-based library doesn't reliably expose).
+	if paths := readFileURLs(); len(paths) > 0 {
+		path := paths[0] // take first file for single-file offers
+		if path != w.prevText {
+			w.prevText = path
+			w.lastEvent = now
+			if w.onChange != nil {
+				go w.onChange(Change{Type: ChangeText, Text: path})
+			}
+			return
+		}
+	}
 
-	if text != w.prevText {
+	// Check text.
+	if text := w.reader.ReadText(); text != w.prevText {
 		w.prevText = text
 		w.lastEvent = now
-		cb := w.onChange
-		w.mu.Unlock()
-		if cb != nil {
-			cb(Change{Type: ChangeText, Text: text})
+		if w.onChange != nil {
+			go w.onChange(Change{Type: ChangeText, Text: text})
 		}
 		return
 	}
 
-	if img != nil && !bytesEqual(img, w.prevImage) {
-		w.prevImage = make([]byte, len(img))
-		copy(w.prevImage, img)
-		w.lastEvent = now
-		cb := w.onChange
-		w.mu.Unlock()
-		if cb != nil {
-			cb(Change{Type: ChangeImage, Image: img})
+	// Check image.
+	if img := w.reader.ReadImage(); img != nil {
+		if !bytesEqual(img, w.prevImage) {
+			w.prevImage = make([]byte, len(img))
+			copy(w.prevImage, img)
+			w.lastEvent = now
+			if w.onChange != nil {
+				go w.onChange(Change{Type: ChangeImage, Image: img})
+			}
 		}
-		return
 	}
-
-	w.mu.Unlock()
 }
 
 // Pause temporarily stops clipboard monitoring.
