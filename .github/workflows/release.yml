@@ -227,6 +227,26 @@ jobs:
       - name: Install NSIS
         run: choco install nsis -y
 
+      - name: Add NSIS to PATH
+        shell: pwsh
+        run: |
+          $candidates = @(
+            "$env:ChocolateyInstall\bin",
+            "${env:ProgramFiles(x86)}\NSIS",
+            "$env:ProgramFiles\NSIS"
+          )
+          foreach ($candidate in $candidates) {
+            if (Test-Path $candidate) {
+              Add-Content -Path $env:GITHUB_PATH -Value $candidate
+              $env:PATH = "$candidate;$env:PATH"
+            }
+          }
+          $makensis = Get-Command makensis -ErrorAction SilentlyContinue
+          if (-not $makensis) {
+            throw "makensis not found after NSIS installation"
+          }
+          Write-Host "Using makensis at $($makensis.Source)"
+
       - name: Generate bindings
         run: wails3 generate bindings -ts -i -clean=true
 
