@@ -33,6 +33,8 @@ dev_mode:
   executes:
     - cmd: cd frontend && bun install
       type: once
+    - cmd: wails3 generate bindings -ts -i
+      type: blocking
     - cmd: cd frontend && WAILS_VITE_PORT=9245 bun run dev
       type: background
     - cmd: go mod tidy
