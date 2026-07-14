@@ -2,12 +2,14 @@ package transfer
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
 
-	syncpkg "mercury/app/backend/sync"
+	"mercury/app/backend/crypto"
+	"mercury/app/backend/transport"
 )
 
 // sendFile streams a file over the sync port as MsgFileChunk messages.
@@ -23,7 +25,7 @@ func (m *Manager) sendFile(tid, peerAddr, filePath string, fileSize int64) {
 	}
 	defer f.Close()
 
-	addr := stripPort(peerAddr) + ":47821"
+	addr := fmt.Sprintf("%s:%d", stripPort(peerAddr), transport.Port)
 	buf := make([]byte, chunkSize)
 	var total int64
 
@@ -32,13 +34,13 @@ func (m *Manager) sendFile(tid, peerAddr, filePath string, fileSize int64) {
 		n, rerr := f.Read(buf)
 		if n > 0 {
 			chunk := buf[:n]
-			enc, cerr := syncpkg.Encrypt(chunk, m.key)
+			enc, cerr := crypto.Encrypt(chunk, m.key)
 			if cerr != nil {
 				log.Printf("[transfer] encrypt: %v", cerr)
 				return
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
-			err := syncpkg.SendMsg(ctx, addr, syncpkg.MsgFileChunk, enc)
+			err := transport.SendMsg(ctx, addr, transport.MsgFileChunk, enc)
 			cancel()
 			if err != nil {
 				log.Printf("[transfer] send chunk: %v", err)

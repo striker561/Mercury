@@ -73,12 +73,12 @@ func (m *MercuryApp) startSync(passphrase string) {
 
 	m.syncSvc = services.NewSyncService(passphrase)
 
-	// Wire sync → transfer: decrypted file chunks flow through a channel,
-	// file offers are forwarded directly to the transfer service.
+	// Wire the shared TCP listener: sync handles clipboard, transfer handles
+	// file chunks.  They don't know about each other — OnMessage is the glue.
 	key := services.DeriveKey(passphrase)
 	m.transSvc = services.NewTransferService(key)
-	m.syncSvc.SetOnFileChunk(func(chunk []byte) {
-		m.transSvc.ChunkChan() <- chunk
+	m.syncSvc.SetOnMessage(func(msgType byte, payload []byte) {
+		m.transSvc.ChunkChan() <- payload
 	})
 	m.syncSvc.SetOnFileOffer(func(fileName string, fileSize int64, peerAddr string) {
 		m.transSvc.IncomingOffer(fileName, fileSize, peerAddr)

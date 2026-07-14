@@ -4,50 +4,46 @@ import (
 	"context"
 	"log"
 	"sync"
+
+	"mercury/app/backend/crypto"
+	"mercury/app/backend/transport"
 )
 
 // OnReceiveCallback is called when a decrypted clipboard payload arrives.
 type OnReceiveCallback func(payload []byte)
 
-// OnFileChunkCallback is called when a decrypted file chunk arrives.
-type OnFileChunkCallback func(chunk []byte)
-
-// Manager wires together mDNS discovery, TCP transport, and crypto to
-// provide LAN clipboard sync and file transfer on a single port.
-// Create one with NewManager, then Start/Stop.
+// Manager wires mDNS discovery, TCP transport, and crypto for clipboard sync.
+// Create with NewManager, then Start/Stop.
 type Manager struct {
-	key        []byte
-	peerMap    *PeerMap
-	incoming   chan []byte
-	fileChunks chan []byte
+	key      []byte
+	peerMap  *PeerMap
+	incoming chan []byte
 
-	mu          sync.Mutex
-	running     bool
-	cancel      context.CancelFunc
-	wg          sync.WaitGroup
-	onReceive   OnReceiveCallback
-	onFileChunk OnFileChunkCallback
+	mu        sync.Mutex
+	running   bool
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
+	onReceive OnReceiveCallback
+
+	// OnMessage, if set, is called for every message the listener receives
+	// that is NOT MsgClipboard.  The app layer uses this to route file
+	// chunks to the transfer manager without coupling sync to transfer.
+	OnMessage func(msgType byte, payload []byte)
 }
 
 // NewManager creates a Manager that derives its encryption key from the
 // given passphrase.  Call Start to begin discovery and listening.
 func NewManager(passphrase string) *Manager {
 	return &Manager{
-		key:        DeriveKey(passphrase),
-		peerMap:    NewPeerMap(),
-		incoming:   make(chan []byte, 10),
-		fileChunks: make(chan []byte, 20),
+		key:     crypto.DeriveKey(passphrase),
+		peerMap: NewPeerMap(),
+		incoming: make(chan []byte, 10),
 	}
 }
 
 // SetOnReceive registers a callback for every decrypted clipboard payload.
 func (m *Manager) SetOnReceive(cb OnReceiveCallback) {
 	m.onReceive = cb
-}
-
-// SetOnFileChunk registers a callback for every incoming file chunk.
-func (m *Manager) SetOnFileChunk(cb OnFileChunkCallback) {
-	m.onFileChunk = cb
 }
 
 // Start begins LAN discovery, TCP listening, and the event loop.
@@ -62,13 +58,27 @@ func (m *Manager) Start() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	added := make(chan Peer, 10)
 
-	if err := Announce(ctx, Port, ""); err != nil {
+	if err := Announce(ctx, transport.Port, ""); err != nil {
 		cancel()
 		return err
 	}
 
 	go func() {
-		if err := Listen(ctx, Port, m.incoming, m.fileChunks); err != nil {
+		// Sync owns the TCP listener but routes non-clipboard messages
+		// (file chunks) to the app layer via OnMessage.
+		if err := transport.Listen(ctx, transport.Port, func(msgType byte, payload []byte) {
+			if msgType == transport.MsgClipboard {
+				select {
+				case m.incoming <- payload:
+				default:
+					log.Printf("[sync] dropped incoming (channel full)")
+				}
+				return
+			}
+			if m.OnMessage != nil {
+				m.OnMessage(msgType, payload)
+			}
+		}); err != nil {
 			if ctx.Err() == nil {
 				log.Printf("[sync] listen error: %v", err)
 			}
@@ -118,7 +128,7 @@ func (m *Manager) Restart(passphrase string) error {
 	m.Stop()
 
 	m.mu.Lock()
-	m.key = DeriveKey(passphrase)
+	m.key = crypto.DeriveKey(passphrase)
 	m.peerMap = NewPeerMap()
 	m.incoming = make(chan []byte, 10)
 	m.mu.Unlock()
@@ -139,12 +149,12 @@ func (m *Manager) Broadcast(payload []byte) {
 		return
 	}
 
-	if len(payload) > maxClipboardSize {
-		log.Printf("[sync] skipping oversized payload (%d > %d bytes)", len(payload), maxClipboardSize)
+	if len(payload) > transport.MaxClipboardSize {
+		log.Printf("[sync] skipping oversized payload (%d > %d bytes)", len(payload), transport.MaxClipboardSize)
 		return
 	}
 
-	ciphertext, err := Encrypt(payload, key)
+	ciphertext, err := crypto.Encrypt(payload, key)
 	if err != nil {
 		log.Printf("[sync] encrypt failed: %v", err)
 		return
@@ -162,9 +172,9 @@ func (m *Manager) Broadcast(payload []byte) {
 		p := p // capture loop variable
 		go func() {
 			defer wg.Done()
-			ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
+			ctx, cancel := context.WithTimeout(context.Background(), transport.SendTimeout)
 			defer cancel()
-			if err := Send(ctx, p.Addr, ciphertext); err != nil {
+			if err := transport.Send(ctx, p.Addr, ciphertext); err != nil {
 				log.Printf("[sync] send to %s (%s) failed: %v", p.ID, p.Addr, err)
 				if m.peerMap.RecordFailure(p.ID) {
 					log.Printf("[sync] evicted peer %s (send failures)", p.ID)
@@ -194,8 +204,9 @@ func (m *Manager) Running() bool {
 	return m.running
 }
 
-// eventLoop is the central demux: decrypts clipboard payloads and file chunks,
-// then dispatches them to the registered callbacks (onReceive / onFileChunk).
+// eventLoop decrypts clipboard payloads and dispatches to onReceive.
+// File chunks are handled entirely by the app layer via OnMessage —
+// this event loop knows nothing about them.
 func (m *Manager) eventLoop(ctx context.Context, added <-chan Peer) {
 	defer m.wg.Done()
 
@@ -204,23 +215,13 @@ func (m *Manager) eventLoop(ctx context.Context, added <-chan Peer) {
 		case <-ctx.Done():
 			return
 		case ciphertext := <-m.incoming:
-			// Clipboard payload: decrypt → onReceive (writes OS clipboard).
-			decrypted, err := Decrypt(ciphertext, m.key)
+					decrypted, err := crypto.Decrypt(ciphertext, m.key)
 			if err != nil {
 				log.Printf("[sync] decrypt failed (wrong key?): %v", err)
 			} else if m.onReceive != nil {
 				m.onReceive(decrypted)
 			}
-		case chunk := <-m.fileChunks:
-			// File chunk: decrypt → onFileChunk (feeds transfer chunkBuf).
-			decrypted, err := Decrypt(chunk, m.key)
-			if err != nil {
-				log.Printf("[sync] file chunk decrypt failed: %v", err)
-			} else if m.onFileChunk != nil {
-				m.onFileChunk(decrypted)
-			}
 		case peer := <-added:
-			// New peer discovered via mDNS → add to peer map.
 			m.peerMap.AddOrUpdate(peer.ID, peer.Addr)
 		}
 	}

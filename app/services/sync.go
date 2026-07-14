@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 
+	"mercury/app/backend/crypto"
 	"mercury/app/backend/sync"
 
 	goclipboard "golang.design/x/clipboard"
@@ -29,9 +30,10 @@ type SyncService struct {
 	onFileOffer OnFileOfferCallback
 }
 
-// SetOnFileChunk registers a callback for incoming file chunks.
-func (s *SyncService) SetOnFileChunk(cb sync.OnFileChunkCallback) {
-	s.manager.SetOnFileChunk(cb)
+// SetOnMessage registers a callback for non-clipboard messages (file chunks)
+// received on the shared TCP listener.
+func (s *SyncService) SetOnMessage(handler func(byte, []byte)) {
+	s.manager.OnMessage = handler
 }
 
 // NewSyncService creates a sync service with the given passphrase.
@@ -41,9 +43,9 @@ func NewSyncService(passphrase string) *SyncService {
 	}
 }
 
-// DeriveKey derives the encryption key from the passphrase (re-exports sync.DeriveKey).
+// DeriveKey derives the encryption key from the passphrase.
 func DeriveKey(passphrase string) []byte {
-	return sync.DeriveKey(passphrase)
+	return crypto.DeriveKey(passphrase)
 }
 
 // SetOnFileOffer registers a callback for incoming file offers.
