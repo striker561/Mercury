@@ -1,6 +1,10 @@
 # Mercury
 
-> *"I carry messages. Yours, specifically. Across your LAN. Without the clouds, without the drama, and definitely without your data ending up in a database you didn't sign up for."*
+<p align="center">
+  <img src="frontend/public/mercury-icon.png" alt="Mercury logo" width="200"/>
+</p>
+
+> _"I carry messages. Yours, specifically. Across your LAN. Without the clouds, without the drama, and definitely without your data ending up in a database you didn't sign up for."_
 
 Mercury is a cross-platform LAN clipboard and file sharing tray app. It lives in your system tray, judges your networking setup silently, and ensures whatever you copy on one machine appears on another — provided they share the same passphrase and are on the same network.
 
@@ -20,14 +24,14 @@ No cloud. No accounts. No history. **It just works.** Like a messenger god, but 
 
 ## Tech Stack
 
-| Layer | Choice | Why |
-|-------|--------|-----|
-| Framework | Wails v3 | Because writing web views in bare C++ is barbaric |
-| Backend | Go | Because I wanted to learn it, and it's fast enough to judge you in real-time |
-| Frontend | React + TypeScript | Because you have to suffer somewhere |
-| Bundler | Bun | It's fast. It's trendy. I like it. |
-| Encryption | AES-256-GCM + PBKDF2 | Your cat pictures are safe |
-| Discovery | mDNS (zeroconf) | No central server. No config. It just works. |
+| Layer      | Choice               | Why                                                                          |
+| ---------- | -------------------- | ---------------------------------------------------------------------------- |
+| Framework  | Wails v3             | Because writing web views in bare C++ is barbaric                            |
+| Backend    | Go                   | Because I wanted to learn it, and it's fast enough to judge you in real-time |
+| Frontend   | React + TypeScript   | Because you have to suffer somewhere                                         |
+| Bundler    | Bun                  | It's fast. It's trendy. I like it.                                           |
+| Encryption | AES-256-GCM + PBKDF2 | Your cat pictures are safe                                                   |
+| Discovery  | mDNS (zeroconf)      | No central server. No config. It just works.                                 |
 
 ## Getting Started
 
@@ -75,10 +79,10 @@ One binary. Zero dependencies. Divine.
 
 The Mercury logo is available in two variants:
 
-| Variant | File | Purpose |
-|---------|------|---------|
-| Default | `logo.png` | Tray icon (idle), favicon, social cards |
-| Active | `logo-active.png` | Tray icon (transfer in progress) |
+| Variant | File              | Purpose                                 |
+| ------- | ----------------- | --------------------------------------- |
+| Default | `logo.png`        | Tray icon (idle), favicon, social cards |
+| Active  | `logo-active.png` | Tray icon (transfer in progress)        |
 
 On macOS, the logo is set as a **template icon** — the system automatically inverts it (black → white in light menu bars, stays black in dark mode). On Linux, the raw PNG is used.
 
@@ -116,6 +120,7 @@ mercury/
 - **Right click** — Context menu. Mercury header (gods don't need interaction). Peer count (dynamic, because we're generous). Pause/Resume. Quit.
 
 The tray icon has two moods:
+
 - **Active** — `app/icon-active.png` used when a file transfer is in progress
 - **Idle** — `app/icon.png` (default, auto-inverts on macOS for light/dark mode)
 
@@ -123,11 +128,11 @@ The logo (`logo.png` and `logo-active.png`) lives in the project root as the sou
 
 ### Settings
 
-| Section | What it does |
-|---------|-------------|
-| Sync | Passphrase input with show/hide. Enable/disable toggle. Start and stop the god machine. |
-| Peers | Live list of connected devices. Refreshes every 5 seconds because we care. |
-| Files | Where received files land (default `~/Mercury/`). Change folder when you feel adventurous. |
+| Section | What it does                                                                               |
+| ------- | ------------------------------------------------------------------------------------------ |
+| Sync    | Passphrase input with show/hide. Enable/disable toggle. Start and stop the god machine.    |
+| Peers   | Live list of connected devices. Refreshes every 5 seconds because we care.                 |
+| Files   | Where received files land (default `~/Mercury/`). Change folder when you feel adventurous. |
 
 ## Security Model
 
@@ -141,12 +146,12 @@ Because even gods respect privacy.
 
 ## Performance
 
-| Metric | Target |
-|--------|--------|
-| Idle RAM | Under 50MB |
-| Idle CPU | Effectively 0% (we're not crypto miners) |
-| Copy-to-available | Under 500ms on LAN |
-| Heartbeat | UDP (not TCP — we're not savages) |
+| Metric            | Target                                   |
+| ----------------- | ---------------------------------------- |
+| Idle RAM          | Under 50MB                               |
+| Idle CPU          | Effectively 0% (we're not crypto miners) |
+| Copy-to-available | Under 500ms on LAN                       |
+| Heartbeat         | UDP (not TCP — we're not savages)        |
 
 ## Roadmap
 
@@ -165,4 +170,4 @@ This is a learning project. I'm figuring Go out as I go. If you see something st
 
 ---
 
-*Built with Go, Wails, and an unreasonable amount of sarcasm.*
+_Built with Go, Wails, and an unreasonable amount of sarcasm._

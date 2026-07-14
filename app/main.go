@@ -79,8 +79,11 @@ func Run(assets embed.FS) error {
 	// Create the system tray with an icon (required on macOS — without one,
 	// the tray item is invisible in the menu bar).
 	tray := app.SystemTray.New()
-	tray.SetTemplateIcon(trayIcon)
-	tray.SetDarkModeIcon(trayIcon)
+	// On macOS, SetTemplateIcon auto-inverts for light/dark mode.
+	// On Linux, use the white version so it's visible on dark trays.
+	tray.SetTemplateIcon(trayIconWhite)
+	tray.SetDarkModeIcon(trayIconWhite)
+	tray.SetIcon(trayIconWhite)
 
 	// Build the right-click context menu with an "Open Mercury" item.
 	menu := system.BuildMenu(app, func() {
