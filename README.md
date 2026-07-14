@@ -119,11 +119,13 @@ Download the latest release for your platform. Bundle ID everywhere: **`com.merc
 
 ### Settings
 
-| Section | What it does                                                     |
-| ------- | ---------------------------------------------------------------- |
-| Sync    | Passphrase shared across your devices, sync on/off               |
-| Files   | Save folder (default `~/Downloads/Mercury/`), accept/auto-accept |
-| General | Start on login                                                   |
+| Section | What it does                                            |
+| ------- | ------------------------------------------------------- |
+| Sync    | Shared passphrase, clipboard sync on/off, save to start |
+| Files   | Where incoming files land, accept offers, auto-accept   |
+| Startup | Launch Mercury when you log in                          |
+
+Mercury **rests** when there is no passphrase, no connected peer, or sync is paused. The clipboard is not watched until a peer is connected.
 
 ## Security
 
@@ -145,7 +147,7 @@ After closing the window, **left-click the tray icon** or click the dock entry t
 
 ### VPN
 
-If a VPN is active (Windscribe, Tailscale, etc.), Mercury shows a **warning on Home**. VPNs can block or skew LAN discovery. I do not fix that automatically yet. If sync fails one way, turn the VPN off and try again on the same network.
+If Mercury detects a **named VPN client interface** (WireGuard, Tailscale, etc.), it shows a warning on Home. macOS system `utun` tunnels are ignored so you are not nagged for no reason. VPNs can still block LAN sync. If copies fail, turn the VPN off and try again.
 
 ### Logo
 
@@ -172,7 +174,7 @@ mercury/
 
 ## Roadmap
 
-See [TODO.md](TODO.md). v0.1.0 is ready. What comes next, mortals will tell me through use. I do not guess.
+See [TODO.md](TODO.md). **v0.1.1** adds tray reopen, `.deb`/NSIS installers, clearer settings UI, and idle rest mode. Tag `v0.1.1` to ship.
 
 ### Linux packages
 

@@ -98,7 +98,7 @@ jobs:
         run: |
           VERSION="${{ github.ref_name }}"
           VERSION="${VERSION#v}"
-          sed -i "s/version: \"0.1.0\"/version: \"${VERSION}\"/" build/linux/nfpm/nfpm.yaml
+          sed -i "s/^version: .*/version: \"${VERSION}\"/" build/linux/nfpm/nfpm.yaml
 
       - name: Build .deb package
         run: wails3 task linux:create:deb VERSION=${{ github.ref_name }}
@@ -182,8 +182,9 @@ jobs:
         run: |
           VERSION="${{ github.ref_name }}"
           VERSION="${VERSION#v}"
-          sed -i "s/\"0.1.0\"/\"${VERSION}\"/g" build/windows/info.json
-          sed -i "s/version=\"0.1.0\"/version=\"${VERSION}\"/g" build/windows/wails.exe.manifest
+          sed -i "s/\"ProductVersion\": \"[^\"]*\"/\"ProductVersion\": \"${VERSION}\"/" build/windows/info.json
+          sed -i "s/\"file_version\": \"[^\"]*\"/\"file_version\": \"${VERSION}\"/" build/windows/info.json
+          sed -i "s/version=\"[^\"]*\"/version=\"${VERSION}\"/" build/windows/wails.exe.manifest
 
       - name: Build NSIS installer
         run: wails3 task windows:package VERSION=${{ github.ref_name }}
