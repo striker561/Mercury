@@ -10,6 +10,7 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+	"github.com/wailsapp/wails/v3/pkg/services/notifications"
 )
 
 // Run is the real Mercury entry point, called from root main.go.
@@ -20,6 +21,10 @@ func Run(assets embed.FS) error {
 
 	mercuryApp := NewMercuryApp()
 
+	// Create notification service for OS-level alerts.
+	notifySvc := notifications.New()
+	mercuryApp.SetNotifier(notifySvc)
+
 	app := application.New(application.Options{
 		Name:        "Mercury",
 		Description: "LAN Clipboard & File Sharing",
@@ -28,6 +33,7 @@ func Run(assets embed.FS) error {
 		},
 		Services: []application.Service{
 			application.NewService(mercuryApp),
+			application.NewService(notifySvc),
 		},
 		Mac: application.MacOptions{
 			ActivationPolicy: application.ActivationPolicyAccessory,

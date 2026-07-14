@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"mercury/app/services"
 
 	goclipboard "golang.design/x/clipboard"
+	"github.com/wailsapp/wails/v3/pkg/services/notifications"
 )
 
 // MercuryApp is the main application struct exposed to the Wails frontend.
@@ -21,11 +23,17 @@ type MercuryApp struct {
 	db          *storage.DB
 	transSvc    *services.TransferService
 	showWindow  func()
+	notifySvc   *notifications.NotificationService
 }
 
 // SetShowWindow registers a callback to show the settings window.
 func (m *MercuryApp) SetShowWindow(fn func()) {
 	m.showWindow = fn
+}
+
+// SetNotifier stores the notification service for OS-level alerts.
+func (m *MercuryApp) SetNotifier(ns *notifications.NotificationService) {
+	m.notifySvc = ns
 }
 
 // NewMercuryApp creates a new MercuryApp instance and opens the settings DB.
@@ -106,6 +114,13 @@ func (m *MercuryApp) startSync(passphrase string) {
 		if m.db != nil && m.db.GetDefaulted(storage.KeyAutoAccept) == "true" {
 			saveDir := resolvePath(m.GetReceivedFolder())
 			m.transSvc.AcceptOffer(offerID, saveDir)
+		}
+		// Fire an OS notification so the user knows a file arrived.
+		if m.notifySvc != nil {
+			go m.notifySvc.SendNotification(notifications.NotificationOptions{
+				Title: "Mercury",
+				Body:  fmt.Sprintf("Incoming file: %s (%d MB)", fileName, fileSize/1024/1024+1),
+			})
 		}
 	})
 	// When a peer accepts our file offer, look up the file path and start sending.

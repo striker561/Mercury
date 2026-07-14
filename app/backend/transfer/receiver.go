@@ -9,7 +9,12 @@ import (
 
 // receiveFile reads decrypted chunks from chunkBuf and writes them to disk.
 func (m *Manager) receiveFile(tid string, o *Offer, saveDir string) {
-	defer m.updateStatus(tid, StatusFailed, 0)
+	failed := true
+	defer func() {
+		if failed {
+			m.updateStatus(tid, StatusFailed, 0)
+		}
+	}()
 
 	log.Printf("[transfer] receiving %s to %s", o.FileName, saveDir)
 	m.updateStatus(tid, StatusReceiving, 0)
@@ -48,6 +53,7 @@ func (m *Manager) receiveFile(tid string, o *Offer, saveDir string) {
 		}
 	}
 
+	failed = false
 	m.updateStatus(tid, StatusDone, received)
 	log.Printf("[transfer] received %s (%d bytes)", o.FileName, received)
 }

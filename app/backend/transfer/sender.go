@@ -14,7 +14,12 @@ import (
 
 // sendFile streams a file over the sync port as MsgFileChunk messages.
 func (m *Manager) sendFile(tid, peerAddr, filePath string, fileSize int64) {
-	defer m.updateStatus(tid, StatusFailed, 0) // overwritten on success
+	failed := true
+	defer func() {
+		if failed {
+			m.updateStatus(tid, StatusFailed, 0)
+		}
+	}()
 
 	log.Printf("[transfer] starting send %s to %s (%d bytes)", filepath.Base(filePath), peerAddr, fileSize)
 	f, err := os.Open(filePath)
@@ -56,6 +61,7 @@ func (m *Manager) sendFile(tid, peerAddr, filePath string, fileSize int64) {
 		}
 	}
 
+	failed = false
 	m.updateStatus(tid, StatusDone, fileSize)
 	log.Printf("[transfer] sent %s (%d bytes)", filepath.Base(filePath), fileSize)
 }
