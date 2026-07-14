@@ -8,7 +8,7 @@ info:
   description: "LAN Clipboard & File Sharing"
   copyright: "(c) 2026, Mercury"
   comments: "Cross-platform LAN clipboard and file sharing tray app"
-  version: "0.1.0"
+  version: "0.2.0"
 
 dev_mode:
   root_path: .

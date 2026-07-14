@@ -10,12 +10,15 @@ I am Mercury. Cross-platform LAN clipboard and file sharing. I live in your syst
 
 No cloud. No accounts. No history. **I just work.** Like a messenger god should. For your clipboard. With fewer lightning bolts and zero venture capital.
 
+**Current version:** `0.2.0` · [All releases](https://github.com/striker561/Mercury/releases) · [Documentation](https://striker561.github.io/Mercury/docs/intro)
+
 ## What I Do
 
 - **Clipboard sync:** You copy on one machine. You paste on another. I make it so. You're welcome.
 - **File transfer:** You send a file. Your peer accepts or declines. I deliver either way. I judge both outcomes equally.
 - **System tray:** I sit in your tray like a smug little orb. No dock icon on macOS. I am not here to clutter your life. I am here to run it.
 - **Encryption:** AES-256-GCM over your LAN. Your passphrase never leaves your devices. I do not gossip. Gods have standards.
+- **Auto-updates:** Installed builds check [GitHub Releases](https://github.com/striker561/Mercury/releases) for new versions (tray → **Check for Updates…**). SHA256 checksums ship in each release as `SHA256SUMS`.
 
 ### What I Am NOT
 
@@ -45,8 +48,31 @@ I exist for mortals who want **simple, unlimited, LAN-only sync** without clipbo
 | Bundler    | Bun + Vite           | Fast. Trendy. Acceptable                                                     |
 | Encryption | AES-256-GCM + PBKDF2 | Your secrets stay yours                                                      |
 | Discovery  | mDNS                 | Zero config. I find your other machines. They find me. As it should be       |
+| Updates    | Wails v3 updater     | GitHub Releases + SHA256 sidecar; in-app install from the tray               |
 
-## Getting Started
+## Download (latest release)
+
+Stable install links (always point at the newest tagged release):
+
+| Platform                      | Download                                                                                                                  | Install                                    |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| macOS (Apple Silicon + Intel) | [mercury-macos-universal.dmg](https://github.com/striker561/Mercury/releases/latest/download/mercury-macos-universal.dmg) | Open DMG, drag **Mercury** to Applications |
+| Linux (Pop!\_OS, Ubuntu)      | [mercury_linux_amd64.deb](https://github.com/striker561/Mercury/releases/latest/download/mercury_linux_amd64.deb)         | `sudo dpkg -i mercury_linux_amd64.deb`     |
+| Windows                       | [mercury-installer.exe](https://github.com/striker561/Mercury/releases/latest/download/mercury-installer.exe)             | Run installer (no console window)          |
+
+Verify downloads with the [`SHA256SUMS`](https://github.com/striker561/Mercury/releases/latest/download/SHA256SUMS) file on the release page.
+
+Bundle ID everywhere: **`com.mercury.app`** (notifications and single-instance).
+
+**Notifications** work from installed builds (`.app`, `.deb`, NSIS). `wails3 dev` skips macOS notifications because there is no bundle ID in dev mode.
+
+### Auto-updates
+
+After the first install from a release, use the tray menu **Check for Updates…** to fetch, verify, and apply a newer version from GitHub. The updater uses bare-binary / `.zip` assets (not the `.dmg` / `.deb` / NSIS installers). You may get a quiet notification ~10 minutes after launch when an update exists; install when ready from the tray.
+
+Ship a release by pushing a semver tag, e.g. `git tag v0.2.0 && git push origin v0.2.0`. CI builds installers, updater assets, and `SHA256SUMS`, then publishes the GitHub Release.
+
+## Getting Started (developers)
 
 ### Prerequisites
 
@@ -66,6 +92,8 @@ go install github.com/wailsapp/wails/v3/cmd/wails3@latest
 ### Run in Dev Mode
 
 ```bash
+git clone https://github.com/striker561/Mercury.git
+cd Mercury
 GOTOOLCHAIN=go1.25.12 wails3 dev
 ```
 
@@ -81,33 +109,23 @@ Or platform packages:
 
 ```bash
 # macOS (.app + DMG)
-wails3 task darwin:package:universal
+wails3 task darwin:package:universal VERSION=v0.2.0
 
 # Linux (.deb for Pop!_OS / Ubuntu)
-wails3 task linux:create:deb
+wails3 task linux:create:deb VERSION=v0.2.0
 
 # Windows (NSIS installer, no console window)
-wails3 task windows:package
+wails3 task windows:package VERSION=v0.2.0
 ```
 
-## Install from Release
-
-Download the latest release for your platform. Bundle ID everywhere: **`com.mercury.app`** (notifications and single-instance).
-
-| Platform                 | File                          | Install                                |
-| ------------------------ | ----------------------------- | -------------------------------------- |
-| macOS                    | `mercury-macos-universal.dmg` | Open DMG, drag Mercury to Applications |
-| Linux (Pop!\_OS, Ubuntu) | `mercury_*_amd64.deb`         | `sudo dpkg -i mercury_*_amd64.deb`     |
-| Windows                  | `mercury-installer.exe`       | Run installer (no terminal flash)      |
-
-**Notifications** work from installed builds (`.app`, `.deb`, NSIS). `wails3 dev` skips macOS notifications because there is no bundle ID in dev mode.
+More detail: [documentation site](https://striker561.github.io/Mercury/docs/getting-started).
 
 ## Usage
 
 ### Tray
 
 - **Left click:** Show or hide my window. Toggle. Simple.
-- **Right click:** Open me, see your peers, pause, resume, quit.
+- **Right click:** Open me, see your peers, pause, resume, **check for updates**, quit.
 - **Tray icon:** I glow when I am working. Otherwise I lurk. You will forget I exist until you need me. That is the point.
 - **Second launch:** Focuses the running instance. I do not spawn ghost processes.
 
@@ -137,6 +155,8 @@ Even gods respect privacy. Mostly.
 4. **mDNS:** I announce that I exist on the LAN. No keys. No secrets. Just presence.
 5. **25MB max** for clipboard sync. If your clipboard exceeds this, you are doing something unholy and I will ignore it without comment.
 
+See the [security docs](https://striker561.github.io/Mercury/docs/security) for the full threat model.
+
 ## Troubleshooting
 
 ### Pop!\_OS / GNOME tray
@@ -161,20 +181,22 @@ It is often confused with the **medical** Rod of Asclepius (one snake, no wings)
 mercury/
 ├── main.go              # Entry point. Where I begin.
 ├── app/
-│   ├── main.go          # Wails bootstrap, tray, window
+│   ├── main.go          # Wails bootstrap, tray, window, updater
 │   ├── app.go           # MercuryApp. How you speak to me.
+│   ├── updater.go       # GitHub Releases auto-update wiring
 │   ├── dashboard.go     # Batched state. I do not do unnecessary round trips.
 │   ├── backend/         # sync, clipboard, transfer, crypto, storage
 │   └── system/          # Tray menu. Small. Angry. Effective.
 ├── frontend/
 │   ├── public/          # CSS, fonts, logos
 │   └── src/             # React UI. The face I show mortals.
+├── docs/                # Documentation site (Docusaurus)
 └── build/               # Platform packaging. Touch rarely.
 ```
 
 ## Roadmap
 
-See [TODO.md](TODO.md). **v0.1.1** adds tray reopen, `.deb`/NSIS installers, clearer settings UI, and idle rest mode. Tag `v0.1.1` to ship.
+See [TODO.md](TODO.md). **v0.2.0** adds streaming file transfer fixes, in-app updates via GitHub Releases, and release pipeline hardening.
 
 ### Linux packages
 
@@ -184,7 +206,7 @@ See [TODO.md](TODO.md). **v0.1.1** adds tray reopen, `.deb`/NSIS installers, cle
 
 This project exists because I wanted to learn Go. That is the truth. I am still learning. The code reflects that.
 
-If you see something stupid in here, **laugh**. Really laugh. Out loud. Then open a PR and fix it. Or open an issue if you are feeling merciful. Keep changes focused. I am a small utility, not a platform, not a lifestyle brand, and not your entire personality.
+If you see something stupid in here, **laugh**. Really laugh. Out loud. Then open a [pull request](https://github.com/striker561/Mercury/pulls) and fix it. Or open an [issue](https://github.com/striker561/Mercury/issues) if you are feeling merciful. Keep changes focused. I am a small utility, not a platform, not a lifestyle brand, and not your entire personality.
 
 Pull requests that make me faster, cleaner, or more divine are welcome. Pull requests that add seventeen config options because someone on Hacker News had an opinion are not.
 

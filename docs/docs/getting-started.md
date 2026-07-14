@@ -4,17 +4,25 @@ sidebar_position: 2
 
 # Getting Started
 
-## Install from a release
+## Download the latest release
 
-Download the latest release for your platform from [GitHub Releases](https://github.com/striker561/Mercury/releases).
+**Release page:** [github.com/striker561/Mercury/releases](https://github.com/striker561/Mercury/releases)
 
-| Platform                 | Artifact                      | Install                                       |
-| ------------------------ | ----------------------------- | --------------------------------------------- |
-| macOS                    | `mercury-macos-universal.dmg` | Open the DMG and drag Mercury to Applications |
-| Linux (Pop!\_OS, Ubuntu) | `mercury_*_amd64.deb`         | `sudo dpkg -i mercury_*_amd64.deb`            |
-| Windows                  | `mercury-installer.exe`       | Run the installer (no console window)         |
+| Platform                 | Download                                                                                                                  | Install                                       |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| macOS (Universal)        | [mercury-macos-universal.dmg](https://github.com/striker561/Mercury/releases/latest/download/mercury-macos-universal.dmg) | Open the DMG and drag Mercury to Applications |
+| Linux (Pop!\_OS, Ubuntu) | [mercury_linux_amd64.deb](https://github.com/striker561/Mercury/releases/latest/download/mercury_linux_amd64.deb)         | `sudo dpkg -i mercury_linux_amd64.deb`        |
+| Windows                  | [mercury-installer.exe](https://github.com/striker561/Mercury/releases/latest/download/mercury-installer.exe)             | Run the installer (no console window)         |
+
+Verify files with [`SHA256SUMS`](https://github.com/striker561/Mercury/releases/latest/download/SHA256SUMS) from the same release.
 
 Bundle ID: **`com.mercury.app`** (notifications and single-instance).
+
+### Auto-updates
+
+Installed builds include the [Wails v3 updater](https://v3.wails.io/guides/updater/). Use the tray menu **Check for Updates…** to download, verify (SHA256), and apply a newer release from GitHub. After ~10 minutes of runtime, Mercury may notify you when an update is available.
+
+Manual installers (`.dmg`, `.deb`, NSIS) are for first-time setup. In-app updates use separate bare-binary / zip assets published on each release.
 
 ## Build from source
 
@@ -34,13 +42,15 @@ cd Mercury
 GOTOOLCHAIN=go1.25.12 wails3 dev
 ```
 
-Production packages:
+Production packages (set `VERSION` to match your tag, without the `v` prefix in plist/nfpm metadata):
 
 ```bash
-wails3 task darwin:package:universal   # macOS .app + DMG
-wails3 task linux:create:deb           # Linux .deb
-wails3 task windows:package            # Windows NSIS installer
+wails3 task darwin:package:universal VERSION=v0.2.0
+wails3 task linux:create:deb           VERSION=v0.2.0
+wails3 task windows:package            VERSION=v0.2.0
 ```
+
+Publish a release by pushing a semver tag, e.g. `git tag v0.2.0 && git push origin v0.2.0`. See [`.github/workflows/release.yml`](https://github.com/striker561/Mercury/blob/main/.github/workflows/release.yml).
 
 ## First run
 

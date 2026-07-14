@@ -39,6 +39,7 @@ _Even gods have a to-do list. Ours is shorter than most._
 
 ## Post v0.1.0 (feedback-driven)
 
+- [x] v0.2.0 — streaming file transfer, GitHub auto-update, release pipeline
 - [ ] Oversized clipboard toast (25MB limit, currently log-only)
 - [ ] Native folder picker (replace zenity/osascript)
 - [ ] Signed release binaries (.deb/.app with notarization)

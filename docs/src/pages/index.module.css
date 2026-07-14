@@ -179,6 +179,17 @@
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--ifm-color-content);
+  text-decoration: none;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.platform:hover {
+  border-color: var(--ifm-color-primary);
+  background: var(--mercury-green-soft);
+  color: var(--ifm-color-content);
+  text-decoration: none;
 }
 
 .platformIcon {

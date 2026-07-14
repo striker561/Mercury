@@ -30,7 +30,7 @@ Everything is encrypted with a **shared passphrase** you choose. There is no clo
 2. The **same passphrase** on each machine
 3. Mercury **running** on each machine (tray icon visible)
 
-When peers appear on the Home screen, sync is ready. See [Getting Started](./getting-started) for install steps.
+When peers appear on the Home screen, sync is ready. See [Getting Started](./getting-started) for install steps and [download links](https://github.com/striker561/Mercury/releases/latest).
 
 ## Logo
 

@@ -75,6 +75,19 @@ func Run(assets embed.FS) error {
 	// Wire the autostart manager so the "Start on login" setting works.
 	mercuryApp.SetAutostartManager(app.Autostart)
 
+	// Wire the in-app updater against GitHub Releases.
+	if err := configureUpdater(app); err != nil {
+		return err
+	}
+	startSilentUpdateCheck(app, func(title, body string) {
+		if notifySvc != nil {
+			_ = notifySvc.SendNotification(notifications.NotificationOptions{
+				Title: title,
+				Body:  body,
+			})
+		}
+	})
+
 	// Create the settings window (hidden by default, shown on tray click).
 	settingsWindow = app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             "settings",
@@ -187,9 +200,7 @@ func Run(assets embed.FS) error {
 
 	// Run the application (blocks until exit).  Wails handles tray cleanup
 	// internally — calling tray.Destroy() here would double-close a channel.
-	err := app.Run()
-
-	return err
+	return app.Run()
 }
 
 // isDarwinDev returns true on macOS when NOT running from a bundled .app.

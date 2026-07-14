@@ -1,13 +1,16 @@
 package system
 
 import (
+	"context"
+
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 // MenuRefs holds live menu items so the caller can update labels/actions.
 type MenuRefs struct {
-	Status *application.MenuItem
-	Pause  *application.MenuItem
+	Status   *application.MenuItem
+	Pause    *application.MenuItem
+	CheckUpd *application.MenuItem
 }
 
 // BuildMenu creates the right-click context menu for the system tray.
@@ -42,6 +45,14 @@ func BuildMenu(app *application.App, showFn func()) (*application.Menu, *MenuRef
 
 	menu.AddSeparator()
 
+	// Check for updates
+	checkItem := menu.Add("Check for Updates…")
+	checkItem.OnClick(func(ctx *application.Context) {
+		go app.Updater.CheckAndInstall(context.Background())
+	})
+
+	menu.AddSeparator()
+
 	// Quit
 	quitItem := menu.Add("Quit")
 	quitItem.OnClick(func(ctx *application.Context) {
@@ -49,7 +60,8 @@ func BuildMenu(app *application.App, showFn func()) (*application.Menu, *MenuRef
 	})
 
 	return menu, &MenuRefs{
-		Status: statusItem,
-		Pause:  pauseItem,
+		Status:   statusItem,
+		Pause:    pauseItem,
+		CheckUpd: checkItem,
 	}
 }

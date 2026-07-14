@@ -93,10 +93,17 @@ export default function Home(): JSX.Element {
             </Link>
             <Link
               className={styles.secondaryBtn}
+              href="https://github.com/striker561/Mercury/releases/latest"
+            >
+              <HardDrives size={18} />
+              Download
+            </Link>
+            <Link
+              className={styles.secondaryBtn}
               href="https://github.com/striker561/Mercury"
             >
               <GithubLogo size={18} />
-              View on GitHub
+              GitHub
             </Link>
           </div>
         </header>
@@ -128,18 +135,27 @@ export default function Home(): JSX.Element {
 
           <p className={styles.sectionTitle}>Platforms</p>
           <div className={styles.platformRow}>
-            <div className={styles.platform}>
+            <a
+              className={styles.platform}
+              href="https://github.com/striker561/Mercury/releases/latest/download/mercury-macos-universal.dmg"
+            >
               <AppleLogo size={20} className={styles.platformIcon} />
               macOS (.dmg)
-            </div>
-            <div className={styles.platform}>
+            </a>
+            <a
+              className={styles.platform}
+              href="https://github.com/striker561/Mercury/releases/latest/download/mercury_linux_amd64.deb"
+            >
               <Devices size={20} className={styles.platformIcon} />
               Linux (.deb)
-            </div>
-            <div className={styles.platform}>
+            </a>
+            <a
+              className={styles.platform}
+              href="https://github.com/striker561/Mercury/releases/latest/download/mercury-installer.exe"
+            >
               <WindowsLogo size={20} className={styles.platformIcon} />
               Windows (installer)
-            </div>
+            </a>
           </div>
         </main>
       </div>
