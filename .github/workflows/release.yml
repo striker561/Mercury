@@ -111,7 +111,7 @@ jobs:
       - name: Prepare Linux release artifacts
         run: |
           VERSION="${{ needs.validate-tag.outputs.version }}"
-          mv bin/mercury_*.deb bin/mercury_linux_amd64.deb
+          cp bin/mercury.deb bin/mercury_linux_amd64.deb
           cp bin/mercury bin/mercury_linux_amd64
           chmod +x bin/mercury_linux_amd64
 
@@ -191,6 +191,10 @@ jobs:
 
       - name: Install Wails v3
         run: go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+
+      - name: Clean stale node_modules (Windows file locking)
+        shell: bash
+        run: rm -rf frontend/node_modules
 
       - name: Generate bindings
         run: wails3 generate bindings -ts -i -clean=true
