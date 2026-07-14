@@ -111,7 +111,7 @@ jobs:
       - name: Prepare Linux release artifacts
         run: |
           VERSION="${{ needs.validate-tag.outputs.version }}"
-          mv bin/mercury_"${VERSION}"_amd64.deb bin/mercury_linux_amd64.deb
+          mv bin/mercury_*.deb bin/mercury_linux_amd64.deb
           cp bin/mercury bin/mercury_linux_amd64
           chmod +x bin/mercury_linux_amd64
 
@@ -188,12 +188,6 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-
-      - name: Cache frontend dependencies
-        uses: actions/cache@v4
-        with:
-          path: frontend/node_modules
-          key: frontend-${{ hashFiles('frontend/bun.lock', 'frontend/bun.lockb', 'frontend/package.json') }}
 
       - name: Install Wails v3
         run: go install github.com/wailsapp/wails/v3/cmd/wails3@latest
