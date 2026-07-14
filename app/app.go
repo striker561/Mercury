@@ -156,10 +156,8 @@ func (m *MercuryApp) startSync(passphrase string) {
 				m.syncSvc.BroadcastFileOffer(id, fi.Name, fi.Size)
 				return
 			}
-			log.Printf("[mercury] clipboard text: %d chars", len(c.Text))
 			m.syncSvc.BroadcastText(c.Text)
 		case clipboard.ChangeImage:
-			log.Printf("[mercury] clipboard image: %d bytes", len(c.Image))
 			m.syncSvc.BroadcastImage(c.Image)
 		}
 	})

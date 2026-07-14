@@ -95,6 +95,7 @@ func (w *Watcher) Start(ctx context.Context) {
 	w.mu.Lock()
 	w.prevText = w.reader.ReadText()
 	w.prevImage = w.reader.ReadImage()
+	w.prevFileURL = ""
 	w.lastEvent = time.Now()
 	w.mu.Unlock()
 

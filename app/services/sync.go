@@ -80,10 +80,8 @@ func (s *SyncService) Start() error {
 		}
 		switch p.Type {
 		case "text":
-			log.Printf("[sync] received text (%d chars)", len(p.Content))
 			goclipboard.Write(goclipboard.FmtText, []byte(p.Content))
 		case "image":
-			log.Printf("[sync] received image (%d bytes)", len(p.Image))
 			goclipboard.Write(goclipboard.FmtImage, p.Image)
 		case "file_offer":
 			log.Printf("[sync] received file offer: %s (%d bytes)", p.FileName, p.FileSize)
