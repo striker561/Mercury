@@ -20,7 +20,7 @@ var defaultValues = map[string]string{
 	KeySyncEnabled:    "false",
 	KeyPaused:         "false",
 	KeyAllowFiles:     "true",
-	KeyReceivedFolder: "~/Mercury/",
+	KeyReceivedFolder: "~/Downloads/Mercury/",
 	KeyAutostart:      "false",
 	KeyAutoAccept:     "false",
 }

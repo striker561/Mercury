@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"strings"
+	"time"
 
 	"mercury/app/backend/clipboard"
 	"mercury/app/backend/crypto"
@@ -26,6 +28,7 @@ type MercuryApp struct {
 	showWindow  func()
 	notifySvc   *notifications.NotificationService
 	autostart   *application.AutostartManager
+	syncAt      time.Time // last clipboard sync activity
 }
 
 // SetShowWindow registers a callback to show the settings window.
@@ -161,11 +164,14 @@ func (m *MercuryApp) startSync(passphrase string) {
 				id := m.transSvc.NewOfferID()
 				m.transSvc.StoreOutgoing(id, fi.Path)
 				m.syncSvc.BroadcastFileOffer(id, fi.Name, fi.Size)
+				m.MarkSyncActivity()
 				return
 			}
 			m.syncSvc.BroadcastText(c.Text)
+			m.MarkSyncActivity()
 		case clipboard.ChangeImage:
 			m.syncSvc.BroadcastImage(c.Image)
+			m.MarkSyncActivity()
 		}
 	})
 }
@@ -273,7 +279,50 @@ func (m *MercuryApp) SetSetting(key, value string) {
 
 // GetReceivedFolder returns the path where received files are stored.
 func (m *MercuryApp) GetReceivedFolder() string {
-	return m.GetSetting(storage.KeyReceivedFolder)
+	p := m.GetSetting(storage.KeyReceivedFolder)
+	if p == "" {
+		return "~/Downloads/Mercury/"
+	}
+	return p
+}
+
+// SetReceivedFolder saves the received file path.
+func (m *MercuryApp) SetReceivedFolder(path string) {
+	if m.db != nil {
+		m.db.Set(storage.KeyReceivedFolder, path)
+	}
+}
+
+// PickReceivedFolder opens a native folder picker dialog and returns the
+// selected path.  Returns empty string if the user cancels.
+func (m *MercuryApp) PickReceivedFolder() string {
+	// Try zenity first (Linux), then osascript (macOS).
+	for _, args := range [][]string{
+		{"zenity", "--file-selection", "--directory", "--title=Select received files folder"},
+		{"osascript", "-e", `choose folder with prompt "Select received files folder"`},
+	} {
+		cmd := exec.Command(args[0], args[1:]...)
+		out, err := cmd.Output()
+		if err != nil {
+			continue
+		}
+		p := strings.TrimSpace(string(out))
+		if p != "" && !strings.HasPrefix(p, "FAIL") {
+			// osascript returns "alias Macintosh HD:Users:..." — strip alias prefix
+			if strings.HasPrefix(p, "alias ") {
+				p = strings.TrimPrefix(p, "alias ")
+			}
+			// macOS returns colon-delimited paths; convert to POSIX
+			p = strings.ReplaceAll(p, ":", "/")
+			if !strings.HasPrefix(p, "/") {
+				p = "/" + p
+			}
+			// Store immediately so next GetReceivedFolder returns it.
+			m.SetReceivedFolder(p)
+			return p
+		}
+	}
+	return ""
 }
 
 // resolvePath expands a leading ~/ to the current user's home directory.
@@ -294,6 +343,16 @@ func resolvePath(p string) string {
 }
 
 // DetectGNOME returns true if running under GNOME desktop.
+// MarkSyncActivity records that we just sent clipboard data to peers.
+func (m *MercuryApp) MarkSyncActivity() {
+	m.syncAt = time.Now()
+}
+
+// HasRecentSync returns true if clipboard was synced within the last 2 seconds.
+func (m *MercuryApp) HasRecentSync() bool {
+	return time.Since(m.syncAt) < 2*time.Second
+}
+
 func (m *MercuryApp) DetectGNOME() bool {
 	return false
 }

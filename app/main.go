@@ -61,14 +61,14 @@ func Run(assets embed.FS) error {
 	settingsWindow := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             "settings",
 		Title:            "Mercury Settings",
-		Width:            480,
-		Height:           640,
+		Width:            380,
+		Height:           520,
 		AlwaysOnTop:      true,
-		Frameless:        false,
+		Frameless:        true,
 		Hidden:           true,
 		DisableResize:    true,
 		HideOnEscape:     true,
-		BackgroundColour: application.NewRGB(18, 18, 18),
+		BackgroundColour: application.NewRGB(15, 17, 23),
 		URL:              "/",
 		Windows: application.WindowsWindow{
 			HiddenOnTaskbar: true,
@@ -126,8 +126,8 @@ func Run(assets embed.FS) error {
 			n := mercuryApp.GetPeerCount()
 			paused := mercuryApp.IsPaused()
 
-			// Check for active transfers — switch to active icon.
-			active := hasActiveTransfers(mercuryApp)
+			// Check for active transfers or recent sync — switch to active icon.
+			active := hasActiveTransfers(mercuryApp) || mercuryApp.HasRecentSync()
 			if active {
 				tray.SetTemplateIcon(trayIconActiveWhite)
 				tray.SetDarkModeIcon(trayIconActiveWhite)
