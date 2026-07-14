@@ -12,7 +12,7 @@ sidebar_position: 2
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
 | macOS (Universal)        | [mercury-macos-universal.dmg](https://github.com/striker561/Mercury/releases/latest/download/mercury-macos-universal.dmg) | Open the DMG and drag Mercury to Applications |
 | Linux (Pop!\_OS, Ubuntu) | [mercury_linux_amd64.deb](https://github.com/striker561/Mercury/releases/latest/download/mercury_linux_amd64.deb)         | `sudo dpkg -i mercury_linux_amd64.deb`        |
-| Windows                  | [mercury-installer.exe](https://github.com/striker561/Mercury/releases/latest/download/mercury-installer.exe)             | Run the installer (no console window)         |
+| Windows                  | [mercury-amd64-installer.exe](https://github.com/striker561/Mercury/releases/latest/download/mercury-amd64-installer.exe)             | Run the installer (no console window)         |
 
 Verify files with [`SHA256SUMS`](https://github.com/striker561/Mercury/releases/latest/download/SHA256SUMS) from the same release.
 

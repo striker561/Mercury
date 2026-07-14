@@ -151,7 +151,7 @@ export default function Home(): JSX.Element {
             </a>
             <a
               className={styles.platform}
-              href="https://github.com/striker561/Mercury/releases/latest/download/mercury-installer.exe"
+              href="https://github.com/striker561/Mercury/releases/latest/download/mercury-amd64-installer.exe"
             >
               <WindowsLogo size={20} className={styles.platformIcon} />
               Windows (installer)

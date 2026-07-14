@@ -58,7 +58,7 @@ Stable install links (always point at the newest tagged release):
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
 | macOS (Apple Silicon + Intel) | [mercury-macos-universal.dmg](https://github.com/striker561/Mercury/releases/latest/download/mercury-macos-universal.dmg) | Open DMG, drag **Mercury** to Applications |
 | Linux (Pop!\_OS, Ubuntu)      | [mercury_linux_amd64.deb](https://github.com/striker561/Mercury/releases/latest/download/mercury_linux_amd64.deb)         | `sudo dpkg -i mercury_linux_amd64.deb`     |
-| Windows                       | [mercury-installer.exe](https://github.com/striker561/Mercury/releases/latest/download/mercury-installer.exe)             | Run installer (no console window)          |
+| Windows                       | [mercury-amd64-installer.exe](https://github.com/striker561/Mercury/releases/latest/download/mercury-amd64-installer.exe)             | Run installer (no console window)          |
 
 Verify downloads with the [`SHA256SUMS`](https://github.com/striker561/Mercury/releases/latest/download/SHA256SUMS) file on the release page.
 
