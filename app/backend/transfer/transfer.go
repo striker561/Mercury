@@ -2,13 +2,15 @@
 //
 // Flow:
 //  1. Offer (name+size+id) broadcast via sync channel
-//  2. User accepts → receiver goroutine starts, reads from chunkBuf
-//  3. Sender encrypts 256 KiB chunks, sends each via sync.SendMsg(MsgFileChunk)
-//  4. Sync listener demuxes by type byte, decrypts, pushes to chunkBuf
-//  5. Receiver writes chunks to disk
+//  2. User accepts → receiver goroutine starts on a per-offer chunk channel
+//  3. Sender dials one TCP connection, encrypts 256 KiB chunks (prefixed with
+//     the offer ID), and streams them via transport.WriteFrame(MsgFileChunk)
+//  4. Sync listener demuxes by type byte, decrypts, routes chunks by offer ID
+//  5. Sender sends MsgFileEnd on the same connection; receiver writes to disk
 //
-// Wire: same port (47821), same AES-256-GCM key as clipboard sync,
-// but with MsgFileChunk type byte so the listener routes to us.
+// Wire: same port (47821), same AES-256-GCM key as clipboard sync.
+// File payloads are tagged with the 16-byte offer ID so concurrent transfers
+// to the same machine do not share a global chunk buffer.
 package transfer
 
 import (
@@ -21,6 +23,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"mercury/app/backend/transport"
 )
 
 const (
@@ -52,12 +56,12 @@ const (
 
 // Progress contains live transfer state for the frontend.
 type Progress struct {
-	ID        string `json:"id"`
-	FileName  string `json:"file_name"`
-	FileSize  int64  `json:"file_size"`
-	Received  int64  `json:"received"`
-	Speed     int64  `json:"speed"`   // bytes/sec, 0 when idle
-	Status    Status `json:"status"`
+	ID       string `json:"id"`
+	FileName string `json:"file_name"`
+	FileSize int64  `json:"file_size"`
+	Received int64  `json:"received"`
+	Speed    int64  `json:"speed"` // bytes/sec, 0 when idle
+	Status   Status `json:"status"`
 }
 
 // ─── Manager ─────────────────────────────────────────────────────────
@@ -72,7 +76,7 @@ type Manager struct {
 	cancel    map[string]chan struct{} // tid → close to cancel
 	nextID    atomic.Int64
 
-	chunkBuf chan []byte // decrypted chunks from sync listener
+	receiveCh map[string]chan []byte // offer ID → decrypted chunks for active receives
 
 	// OnOffer is called when a file offer arrives from the network.
 	OnOffer func(o Offer)
@@ -89,14 +93,53 @@ func NewManager(key []byte) *Manager {
 		outgoing:  make(map[string]string),
 		transfers: make(map[string]*Progress),
 		cancel:    make(map[string]chan struct{}),
-		chunkBuf:  make(chan []byte, 20),
+		receiveCh: make(map[string]chan []byte),
 	}
 }
 
-// ChunkChan returns the channel where file chunks should be sent.
-// The app wires this by feeding decrypted chunks from the sync manager.
-func (m *Manager) ChunkChan() chan<- []byte {
-	return m.chunkBuf
+// OnWireMessage routes a decrypted file-transfer frame to the active receive
+// for its offer ID. Called from the app layer after sync demuxes MsgFileChunk
+// or MsgFileEnd off the shared TCP listener.
+func (m *Manager) OnWireMessage(msgType byte, payload []byte) {
+	switch msgType {
+	case transport.MsgFileChunk:
+		offerID, err := offerIDFromPayload(payload)
+		if err != nil {
+			log.Printf("[transfer] chunk: %v", err)
+			return
+		}
+		chunk := payload[offerIDLen:]
+
+		m.mu.Lock()
+		ch := m.receiveCh[offerID]
+		m.mu.Unlock()
+		if ch == nil {
+			log.Printf("[transfer] chunk for unknown offer %s", offerID)
+			return
+		}
+
+		select {
+		case ch <- chunk:
+		default:
+			log.Printf("[transfer] dropped chunk (channel full) for offer %s", offerID)
+		}
+
+	case transport.MsgFileEnd:
+		if len(payload) != offerIDLen {
+			log.Printf("[transfer] end marker: bad payload length %d", len(payload))
+			return
+		}
+		offerID := string(payload)
+
+		m.mu.Lock()
+		ch := m.receiveCh[offerID]
+		delete(m.receiveCh, offerID)
+		m.mu.Unlock()
+		if ch == nil {
+			return
+		}
+		close(ch)
+	}
 }
 
 // NewOfferID returns a random hex identifier for offers and transfers.
@@ -161,7 +204,12 @@ func (m *Manager) AcceptOffer(offerID, saveDir string) (string, error) {
 	m.transfers[tid] = p
 	m.mu.Unlock()
 
-	go m.receiveFile(tid, o, saveDir)
+	ch := make(chan []byte, 20)
+	m.mu.Lock()
+	m.receiveCh[offerID] = ch
+	m.mu.Unlock()
+
+	go m.receiveFile(tid, offerID, o, saveDir, ch)
 	return tid, nil
 }
 
@@ -201,7 +249,24 @@ func (m *Manager) SendFile(peerAddr, filePath string) (string, error) {
 	m.transfers[tid] = p
 	m.mu.Unlock()
 
-	go m.sendFile(tid, peerAddr, filePath, fi.Size())
+	offerID := m.NewOfferID()
+	go m.sendFile(tid, offerID, peerAddr, filePath, fi.Size())
+	return tid, nil
+}
+
+// SendFileForOffer sends a file for a specific offer ID (after the peer accepted).
+func (m *Manager) SendFileForOffer(offerID, peerAddr, filePath string) (string, error) {
+	fi, err := os.Stat(filePath)
+	if err != nil {
+		return "", fmt.Errorf("transfer: %w", err)
+	}
+	tid := m.NewOfferID()
+	p := &Progress{ID: tid, FileName: filepath.Base(filePath), FileSize: fi.Size(), Status: StatusSending}
+	m.mu.Lock()
+	m.transfers[tid] = p
+	m.mu.Unlock()
+
+	go m.sendFile(tid, offerID, peerAddr, filePath, fi.Size())
 	return tid, nil
 }
 

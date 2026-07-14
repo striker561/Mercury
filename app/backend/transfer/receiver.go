@@ -7,11 +7,12 @@ import (
 	"time"
 )
 
-// receiveFile reads decrypted chunks from chunkBuf and writes them to disk.
-func (m *Manager) receiveFile(tid string, o *Offer, saveDir string) {
+// receiveFile reads decrypted chunks from the per-offer channel and writes them to disk.
+func (m *Manager) receiveFile(tid, offerID string, o *Offer, saveDir string, ch <-chan []byte) {
 	failed := true
 	defer func() {
 		m.mu.Lock()
+		delete(m.receiveCh, offerID)
 		delete(m.cancel, tid)
 		m.mu.Unlock()
 		if failed {
@@ -53,14 +54,26 @@ func (m *Manager) receiveFile(tid string, o *Offer, saveDir string) {
 	progressTick := time.NewTicker(200 * time.Millisecond)
 	defer progressTick.Stop()
 
-	// Chunks arrive already decrypted via sync → OnFileChunk → chunkBuf.
-	// Read until file is complete, with a 30s idle timeout.
+	// Chunks arrive already decrypted via sync → OnWireMessage → per-offer channel.
+	// Read until file is complete or the sender closes the channel (MsgFileEnd).
 	timeout := time.NewTimer(30 * time.Second)
 	defer timeout.Stop()
 
 	for received < o.FileSize {
 		select {
-		case chunk := <-m.chunkBuf:
+		case chunk, ok := <-ch:
+			if !ok {
+				if received != o.FileSize {
+					log.Printf("[transfer] connection closed early (%d/%d)", received, o.FileSize)
+					return
+				}
+				failed = false
+				m.updateStatus(tid, StatusDone, received)
+				m.updateSpeed(tid, 0)
+				log.Printf("[transfer] received %s (%d bytes)", o.FileName, received)
+				return
+			}
+
 			if _, err := f.Write(chunk); err != nil {
 				log.Printf("[transfer] write: %v", err)
 				return

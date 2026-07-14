@@ -141,7 +141,7 @@ func (m *MercuryApp) startSync(passphrase string) {
 			log.Printf("[mercury] decrypt chunk: %v", err)
 			return
 		}
-		m.transSvc.ChunkChan() <- dec
+		m.transSvc.OnWireMessage(msgType, dec)
 	})
 	m.syncSvc.SetOnFileOffer(func(offerID, fileName string, fileSize int64, peerAddr string) {
 		// Use the sender's offer ID so file_accept maps back correctly.
@@ -170,7 +170,7 @@ func (m *MercuryApp) startSync(passphrase string) {
 			// Take first peer — in practice there's only one sender per offer.
 			peers := m.syncSvc.GetPeers()
 			if len(peers) > 0 {
-				m.transSvc.SendFile(peers[0]["addr"], fp)
+				m.transSvc.SendFileForOffer(offerID, peers[0]["addr"], fp)
 			}
 		}
 	})

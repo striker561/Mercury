@@ -21,9 +21,9 @@ func NewTransferService(key []byte) *TransferService {
 	return &TransferService{mgr: transfer.NewManager(key)}
 }
 
-// ChunkChan returns the channel where decrypted file chunks should be sent.
-func (s *TransferService) ChunkChan() chan<- []byte {
-	return s.mgr.ChunkChan()
+// OnWireMessage routes a decrypted file-transfer frame to the active receive.
+func (s *TransferService) OnWireMessage(msgType byte, payload []byte) {
+	s.mgr.OnWireMessage(msgType, payload)
 }
 
 // IncomingOffer registers a file offer from a peer.
@@ -69,6 +69,11 @@ func (s *TransferService) AcceptNotification(offerID string) string {
 // SendFile sends a file to a peer. Returns a transfer ID.
 func (s *TransferService) SendFile(peerAddr, filePath string) (string, error) {
 	return s.mgr.SendFile(peerAddr, filePath)
+}
+
+// SendFileForOffer sends a file after the peer accepted a specific offer.
+func (s *TransferService) SendFileForOffer(offerID, peerAddr, filePath string) (string, error) {
+	return s.mgr.SendFileForOffer(offerID, peerAddr, filePath)
 }
 
 // AllProgress returns progress for active transfers.

@@ -2,9 +2,9 @@ package transfer
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"time"
@@ -13,8 +13,9 @@ import (
 	"mercury/app/backend/transport"
 )
 
-// sendFile streams a file over the sync port as MsgFileChunk messages.
-func (m *Manager) sendFile(tid, peerAddr, filePath string, fileSize int64) {
+// sendFile streams a file over a single persistent TCP connection,
+// sending each chunk as a separate frame on the same connection.
+func (m *Manager) sendFile(tid, offerID, peerAddr, filePath string, fileSize int64) {
 	failed := true
 	defer func() {
 		m.mu.Lock()
@@ -41,7 +42,19 @@ func (m *Manager) sendFile(tid, peerAddr, filePath string, fileSize int64) {
 	}
 	defer f.Close()
 
-	addr := fmt.Sprintf("%s:%d", stripPort(peerAddr), transport.Port)
+	addr := peerTCPAddr(peerAddr)
+
+	// Open a single persistent TCP connection for the whole transfer.
+	dialer := &net.Dialer{Timeout: dialTimeout}
+	ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
+	conn, err := dialer.DialContext(ctx, "tcp", addr)
+	cancel()
+	if err != nil {
+		log.Printf("[transfer] dial %s: %v", addr, err)
+		return
+	}
+	defer conn.Close()
+
 	buf := make([]byte, chunkSize)
 	var total int64
 	startTime := time.Now()
@@ -50,20 +63,25 @@ func (m *Manager) sendFile(tid, peerAddr, filePath string, fileSize int64) {
 	progressTick := time.NewTicker(200 * time.Millisecond)
 	defer progressTick.Stop()
 
-	// Read → encrypt → send loop.  One TCP conn per chunk (LAN; overhead is fine).
+	// Read → encrypt → send loop over a single connection.
+	// The receiver side reads frames in a loop until the connection closes.
 	for total < fileSize {
 		n, rerr := f.Read(buf)
 		if n > 0 {
 			chunk := buf[:n]
-			enc, cerr := crypto.Encrypt(chunk, m.key)
+			wire, perr := packChunkPayload(offerID, chunk)
+			if perr != nil {
+				log.Printf("[transfer] pack chunk: %v", perr)
+				return
+			}
+			enc, cerr := crypto.Encrypt(wire, m.key)
 			if cerr != nil {
 				log.Printf("[transfer] encrypt: %v", cerr)
 				return
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
-			err := transport.SendMsg(ctx, addr, transport.MsgFileChunk, enc)
-			cancel()
-			if err != nil {
+
+			conn.SetWriteDeadline(time.Now().Add(dialTimeout))
+			if err := transport.WriteFrame(conn, transport.MsgFileChunk, enc); err != nil {
 				log.Printf("[transfer] send chunk: %v", err)
 				return
 			}
@@ -95,6 +113,17 @@ func (m *Manager) sendFile(tid, peerAddr, filePath string, fileSize int64) {
 			}
 			break
 		}
+	}
+
+	endEnc, err := crypto.Encrypt([]byte(offerID), m.key)
+	if err != nil {
+		log.Printf("[transfer] encrypt end: %v", err)
+		return
+	}
+	conn.SetWriteDeadline(time.Now().Add(dialTimeout))
+	if err := transport.WriteFrame(conn, transport.MsgFileEnd, endEnc); err != nil {
+		log.Printf("[transfer] send end: %v", err)
+		return
 	}
 
 	failed = false
