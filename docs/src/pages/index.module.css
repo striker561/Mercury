@@ -1,0 +1,187 @@
+.page {
+  background: var(--ifm-background-color);
+}
+
+.hero {
+  text-align: center;
+  padding: 5rem 1.5rem 3.5rem;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.logo {
+  width: 72px;
+  height: 72px;
+  margin-bottom: 1.25rem;
+}
+
+.title {
+  font-size: clamp(2.5rem, 6vw, 3.25rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  margin: 0 0 1rem;
+  color: var(--ifm-color-content);
+}
+
+.lead {
+  font-size: 1.125rem;
+  line-height: 1.6;
+  color: var(--mercury-text-secondary);
+  margin: 0 auto 2rem;
+  max-width: 34rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.primaryBtn,
+.secondaryBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  border-radius: 8px;
+  font-weight: 500;
+  font-size: 0.9375rem;
+  text-decoration: none;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+
+.primaryBtn {
+  background: var(--ifm-color-primary);
+  color: #0f1117;
+  border: none;
+}
+
+.primaryBtn:hover {
+  background: var(--ifm-color-primary-dark);
+  color: #0f1117;
+  text-decoration: none;
+}
+
+.secondaryBtn {
+  background: transparent;
+  color: var(--ifm-color-content);
+  border: 1px solid var(--ifm-border-color);
+}
+
+.secondaryBtn:hover {
+  border-color: var(--ifm-color-primary);
+  color: var(--ifm-color-content);
+  text-decoration: none;
+}
+
+.section {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 1.5rem 4rem;
+}
+
+.sectionTitle {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mercury-text-tertiary);
+  margin: 0 0 1rem;
+  text-align: center;
+}
+
+.featureGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+  margin-bottom: 3rem;
+}
+
+.card {
+  background: var(--ifm-background-surface-color);
+  border: 1px solid var(--ifm-border-color);
+  border-radius: var(--mercury-radius);
+  padding: 1.25rem;
+}
+
+.iconWrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 10px;
+  background: var(--mercury-green-soft);
+  color: var(--ifm-color-primary);
+  margin-bottom: 0.875rem;
+}
+
+.cardTitle {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.375rem;
+  color: var(--ifm-color-content);
+}
+
+.cardText {
+  font-size: 0.875rem;
+  line-height: 1.55;
+  margin: 0;
+  color: var(--mercury-text-secondary);
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 3rem;
+}
+
+.step {
+  background: var(--ifm-background-surface-color);
+  border: 1px solid var(--ifm-border-color);
+  border-radius: var(--mercury-radius);
+  padding: 1.25rem;
+}
+
+.stepNum {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  background: var(--mercury-green-soft);
+  color: var(--ifm-color-primary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.platformRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+}
+
+.platform {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.875rem 1rem;
+  background: var(--ifm-background-surface-color);
+  border: 1px solid var(--ifm-border-color);
+  border-radius: var(--mercury-radius);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--ifm-color-content);
+}
+
+.platformIcon {
+  color: var(--ifm-color-primary);
+  flex-shrink: 0;
+}
