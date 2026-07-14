@@ -12,6 +12,7 @@ interface Peer {
 function App() {
   const [peers, setPeers] = useState<Peer[]>([]);
   const [version, setVersion] = useState("");
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     MercuryApp.GetAllSettings().then((s: any) => {
@@ -33,9 +34,17 @@ function App() {
       <div className="settings-header">
         <h1>Mercury</h1>
         <span className="settings-version">v{version}</span>
+        <button
+          className="btn-gear"
+          onClick={() => setShowSettings(!showSettings)}
+          title="Settings"
+        >
+          {showSettings ? "✕" : "⚙"}
+        </button>
       </div>
 
-      <Settings />
+      {/* Transfers — main view, always on top */}
+      <FileTransfer />
 
       {/* Peers */}
       <section className="settings-section">
@@ -59,7 +68,8 @@ function App() {
         )}
       </section>
 
-      <FileTransfer />
+      {/* Settings — collapsed by default, toggled by gear button */}
+      {showSettings && <Settings />}
     </div>
   );
 }
