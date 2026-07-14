@@ -139,6 +139,7 @@ func (s *SyncService) GetPeers() []map[string]string {
 	for i, p := range peers {
 		result[i] = map[string]string{
 			"id":       p.ID,
+			"hostname": p.ID,
 			"addr":     p.Addr,
 			"lastSeen": p.LastSeen.Format("15:04:05"),
 		}

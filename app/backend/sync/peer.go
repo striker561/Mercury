@@ -11,7 +11,7 @@ const (
 	maxFailCount = 3
 )
 
-// Peer represents a single Clipcat instance discovered on the LAN.
+// Peer represents a Mercury instance discovered on the LAN.
 type Peer struct {
 	ID        string    `json:"id"`
 	Addr      string    `json:"addr"`

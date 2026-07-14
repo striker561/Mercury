@@ -60,10 +60,9 @@ func Run(assets embed.FS) error {
 	// Create the settings window (hidden by default, shown on tray click).
 	settingsWindow := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             "settings",
-		Title:            "Mercury Settings",
-		Width:            380,
-		Height:           520,
-		AlwaysOnTop:      true,
+		Title:            "Mercury",
+		Width:            420,
+		Height:           560,
 		Frameless:        true,
 		Hidden:           true,
 		DisableResize:    true,
@@ -90,24 +89,46 @@ func Run(assets embed.FS) error {
 		settingsWindow.Show()
 	}
 
-	// Wire window show so file offers can pop open the settings.
-	mercuryApp.SetShowWindow(func() { settingsWindow.Show() })
+	// Wire window show/hide so file offers can pop open the settings.
+	mercuryApp.SetShowWindow(func() {
+		settingsWindow.Show()
+		settingsWindow.Focus()
+	})
+	mercuryApp.SetHideWindow(func() {
+		settingsWindow.Hide()
+	})
 
 	// Create the system tray with an icon (required on macOS — without one,
 	// the tray item is invisible in the menu bar).
 	tray := app.SystemTray.New()
-	// On macOS, SetTemplateIcon auto-inverts for light/dark mode.
-	// On Linux, use the white version so it's visible on dark trays.
 	tray.SetTemplateIcon(trayIconWhite)
 	tray.SetDarkModeIcon(trayIconWhite)
 	tray.SetIcon(trayIconWhite)
 
-	// Build the right-click context menu with an "Open Mercury" item.
 	menu, refs := system.BuildMenu(app, func() {
 		settingsWindow.Show()
 		settingsWindow.Focus()
 	})
 	tray.SetMenu(menu)
+
+	mercuryApp.SetEmitChange(func() {
+		app.Event.Emit("dashboard:changed")
+		updateTray(tray, refs, mercuryApp)
+	})
+
+	go func() {
+		var last string
+		ticker := time.NewTicker(400 * time.Millisecond)
+		defer ticker.Stop()
+		for range ticker.C {
+			fp := mercuryApp.DashboardFingerprint()
+			if fp != last {
+				last = fp
+				app.Event.Emit("dashboard:changed")
+				updateTray(tray, refs, mercuryApp)
+			}
+		}
+	}()
 
 	// Wire the pause/resume menu item.
 	refs.Pause.OnClick(func(ctx *application.Context) {
@@ -119,38 +140,10 @@ func Run(assets embed.FS) error {
 			refs.Pause.SetLabel("Pause Sync")
 			tray.SetTooltip("Mercury — Running")
 		}
+		updateTray(tray, refs, mercuryApp)
 	})
 
-	// Update tray status periodically.
-	go func() {
-		for {
-			time.Sleep(2 * time.Second)
-			n := mercuryApp.GetPeerCount()
-			paused := mercuryApp.IsPaused()
-
-			// Check for active transfers or recent sync — switch to active icon.
-			active := hasActiveTransfers(mercuryApp) || mercuryApp.HasRecentSync()
-			if active {
-				tray.SetTemplateIcon(trayIconActiveWhite)
-				tray.SetDarkModeIcon(trayIconActiveWhite)
-				tray.SetIcon(trayIconActiveWhite)
-			} else {
-				tray.SetTemplateIcon(trayIconWhite)
-				tray.SetDarkModeIcon(trayIconWhite)
-				tray.SetIcon(trayIconWhite)
-			}
-
-			var status string
-			if paused {
-				status = "⏸ Paused"
-			} else if n > 0 {
-				status = fmt.Sprintf("● Connected (%d peer%s)", n, map[bool]string{true: "", false: "s"}[n == 1])
-			} else {
-				status = "○ Idle (0 peers)"
-			}
-			refs.Status.SetLabel(status)
-		}
-	}()
+	updateTray(tray, refs, mercuryApp)
 
 	// No automatic left-click toggle — the user opens the window from the
 	// context menu.  On Linux, right-click opens the menu via the native
@@ -188,12 +181,27 @@ func detectGNOME() bool {
 	return strings.Contains(desktop, "gnome") || strings.Contains(session, "gnome")
 }
 
-// hasActiveTransfers returns true when any transfer is in progress.
-func hasActiveTransfers(app *MercuryApp) bool {
-	for _, p := range app.GetTransferProgress() {
-		if p.Status == "sending" || p.Status == "receiving" {
-			return true
-		}
+// updateTray refreshes the tray icon and status label from current app state.
+func updateTray(tray *application.SystemTray, refs *system.MenuRefs, mercuryApp *MercuryApp) {
+	if mercuryApp.trayActive() {
+		tray.SetTemplateIcon(trayIconActiveWhite)
+		tray.SetDarkModeIcon(trayIconActiveWhite)
+		tray.SetIcon(trayIconActiveWhite)
+	} else {
+		tray.SetTemplateIcon(trayIconWhite)
+		tray.SetDarkModeIcon(trayIconWhite)
+		tray.SetIcon(trayIconWhite)
 	}
-	return false
+
+	n := mercuryApp.GetPeerCount()
+	paused := mercuryApp.IsPaused()
+	var status string
+	if paused {
+		status = "⏸ Paused"
+	} else if n > 0 {
+		status = fmt.Sprintf("● Connected (%d peer%s)", n, map[bool]string{true: "", false: "s"}[n == 1])
+	} else {
+		status = "○ Idle (0 peers)"
+	}
+	refs.Status.SetLabel(status)
 }

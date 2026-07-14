@@ -14,26 +14,45 @@ import (
 	"mercury/app/backend/storage"
 	"mercury/app/services"
 
-	goclipboard "golang.design/x/clipboard"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/services/notifications"
+	goclipboard "golang.design/x/clipboard"
 )
 
 // MercuryApp is the main application struct exposed to the Wails frontend.
 type MercuryApp struct {
-	syncSvc     *services.SyncService
-	clipSvc     *services.ClipboardService
-	db          *storage.DB
-	transSvc    *services.TransferService
-	showWindow  func()
-	notifySvc   *notifications.NotificationService
-	autostart   *application.AutostartManager
-	syncAt      time.Time // last clipboard sync activity
+	syncSvc    *services.SyncService
+	clipSvc    *services.ClipboardService
+	db         *storage.DB
+	transSvc   *services.TransferService
+	showWindow func()
+	hideWindow func()
+	emitChange func()
+	notifySvc  *notifications.NotificationService
+	autostart  *application.AutostartManager
+	syncAt     time.Time // last clipboard sync activity
 }
 
 // SetShowWindow registers a callback to show the settings window.
 func (m *MercuryApp) SetShowWindow(fn func()) {
 	m.showWindow = fn
+}
+
+// SetHideWindow registers a callback to hide the settings window.
+func (m *MercuryApp) SetHideWindow(fn func()) {
+	m.hideWindow = fn
+}
+
+// SetEmitChange registers a callback invoked when dashboard state changes.
+func (m *MercuryApp) SetEmitChange(fn func()) {
+	m.emitChange = fn
+}
+
+// HideWindow hides the settings window (tray app stays running).
+func (m *MercuryApp) HideWindow() {
+	if m.hideWindow != nil {
+		m.hideWindow()
+	}
 }
 
 // SetNotifier stores the notification service for OS-level alerts.
@@ -81,6 +100,7 @@ func (m *MercuryApp) SetPassphrase(passphrase string) {
 		m.db.SetPassphrase(passphrase)
 	}
 	m.startSync(passphrase)
+	m.notifyChange()
 }
 
 // startSync initializes clipboard and begins syncing.
@@ -124,6 +144,10 @@ func (m *MercuryApp) startSync(passphrase string) {
 		if m.db != nil && m.db.GetDefaulted(storage.KeyAutoAccept) == "true" {
 			saveDir := resolvePath(m.GetReceivedFolder())
 			m.transSvc.AcceptOffer(offerID, saveDir)
+		}
+		m.notifyChange()
+		if m.showWindow != nil {
+			m.showWindow()
 		}
 		// Fire an OS notification so the user knows a file arrived.
 		if m.notifySvc != nil {
@@ -195,6 +219,7 @@ func (m *MercuryApp) TogglePause() bool {
 			m.clipSvc.Resume()
 		}
 	}
+	m.notifyChange()
 	return paused
 }
 
@@ -342,7 +367,6 @@ func resolvePath(p string) string {
 	return p
 }
 
-// DetectGNOME returns true if running under GNOME desktop.
 // MarkSyncActivity records that we just sent clipboard data to peers.
 func (m *MercuryApp) MarkSyncActivity() {
 	m.syncAt = time.Now()
@@ -353,7 +377,16 @@ func (m *MercuryApp) HasRecentSync() bool {
 	return time.Since(m.syncAt) < 2*time.Second
 }
 
-func (m *MercuryApp) DetectGNOME() bool {
+// trayActive returns true when the tray icon should show the active state.
+func (m *MercuryApp) trayActive() bool {
+	if m.HasRecentSync() {
+		return true
+	}
+	for _, p := range m.GetTransferProgress() {
+		if p.Status == "sending" || p.Status == "receiving" {
+			return true
+		}
+	}
 	return false
 }
 
@@ -381,6 +414,7 @@ func (m *MercuryApp) AcceptFileOffer(offerID string) string {
 	log.Printf("[mercury] accepted offer %s, transfer %s", offerID, tid)
 	// Tell the sender we accepted so they start streaming the file.
 	m.syncSvc.BroadcastFileAccept(offerID)
+	m.notifyChange()
 	return tid
 }
 
@@ -389,6 +423,7 @@ func (m *MercuryApp) RejectFileOffer(offerID string) {
 	if m.transSvc != nil {
 		m.transSvc.RejectOffer(offerID)
 	}
+	m.notifyChange()
 }
 
 // SendFile sends a file to a peer.  Returns the transfer ID.
@@ -417,4 +452,5 @@ func (m *MercuryApp) CancelTransfer(tid string) {
 	if m.transSvc != nil {
 		m.transSvc.CancelTransfer(tid)
 	}
+	m.notifyChange()
 }

@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	// serviceType is the mDNS service type used for Clipcat peer discovery.
+	// serviceType is the mDNS service type used for Mercury peer discovery.
 	serviceType = "_mercury._tcp"
 
 	// domain is the mDNS domain (local link-local).
@@ -31,7 +31,7 @@ func hostname() string {
 	return h
 }
 
-// Announce registers this Clipcat instance on the LAN via mDNS so other
+// Announce registers this Mercury instance on the LAN via mDNS so other
 // instances can discover it.  The server shuts down automatically when
 // ctx is cancelled.
 func Announce(ctx context.Context, port int, instance string) error {
@@ -41,7 +41,7 @@ func Announce(ctx context.Context, port int, instance string) error {
 
 	server, err := zeroconf.Register(
 		instance,    // service instance name
-		serviceType, // service type: _clipcat._tcp
+		serviceType, // service type: _mercury._tcp
 		domain,      // domain: local.
 		port,        // port
 		nil,         // no metadata text entries
@@ -59,7 +59,7 @@ func Announce(ctx context.Context, port int, instance string) error {
 	return nil
 }
 
-// Browse discovers other Clipcat instances on the LAN.  It sends discovered
+// Browse discovers other Mercury instances on the LAN.  It sends discovered
 // peers to the added channel.  The goroutine runs until ctx is cancelled.
 //
 // IMPORTANT: resolver.Browse is non-blocking — it starts background
