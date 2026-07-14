@@ -64,16 +64,18 @@ type Progress struct {
 type Manager struct {
 	key       []byte
 	mu        sync.Mutex
-	offers    map[string]*Offer
+	offers    map[string]*Offer    // incoming offers (from network)
+	outgoing  map[string]string   // our offers: offerID → filePath
 	transfers map[string]*Progress
 	nextID    atomic.Int64
 
-	// chunkBuf receives encrypted file chunks from the sync manager.
-	// receiveFile reads from it and writes to disk.
-	chunkBuf chan []byte
+	chunkBuf chan []byte // decrypted chunks from sync listener
 
 	// OnOffer is called when a file offer arrives from the network.
 	OnOffer func(o Offer)
+
+	// OnAccept is called when a remote peer accepts one of our offers.
+	OnAccept func(offerID string)
 }
 
 // NewManager creates a transfer manager that uses the given encryption key.
@@ -81,6 +83,7 @@ func NewManager(key []byte) *Manager {
 	return &Manager{
 		key:       key,
 		offers:    make(map[string]*Offer),
+		outgoing:  make(map[string]string),
 		transfers: make(map[string]*Progress),
 		chunkBuf:  make(chan []byte, 20),
 	}
@@ -149,6 +152,22 @@ func (m *Manager) RejectOffer(offerID string) {
 	m.mu.Lock()
 	delete(m.offers, offerID)
 	m.mu.Unlock()
+}
+
+// StoreOutgoing remembers an offer we broadcast so we can send the file when accepted.
+func (m *Manager) StoreOutgoing(offerID, filePath string) {
+	m.mu.Lock()
+	m.outgoing[offerID] = filePath
+	m.mu.Unlock()
+}
+
+// AcceptNotification is called when a remote peer accepts one of our offers.
+func (m *Manager) AcceptNotification(offerID string) string {
+	m.mu.Lock()
+	fp := m.outgoing[offerID]
+	delete(m.outgoing, offerID)
+	m.mu.Unlock()
+	return fp
 }
 
 // SendFile sends a file to a peer. Returns a transfer ID.

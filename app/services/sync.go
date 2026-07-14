@@ -10,13 +10,14 @@ import (
 	goclipboard "golang.design/x/clipboard"
 )
 
-// wirePayload is the JSON structure sent over the network for clipboard sync.
+// wirePayload is the JSON structure sent over the network.
 type wirePayload struct {
-	Type    string `json:"type"`    // "text", "image", or "file_offer"
+	Type    string `json:"type"`    // "text", "image", "file_offer", "file_accept"
 	Content string `json:"content"` // text content (for text type)
 	Image   []byte `json:"image"`   // PNG bytes (for image type)
 
-	// File offer fields.
+	// File offer / accept fields.
+	OfferID  string `json:"offer_id,omitempty"`
 	FileName string `json:"file_name,omitempty"`
 	FileSize int64  `json:"file_size,omitempty"`
 }
@@ -24,10 +25,14 @@ type wirePayload struct {
 // OnFileOfferCallback is called when a file offer arrives from a peer.
 type OnFileOfferCallback func(fileName string, fileSize int64, peerAddr string)
 
+// OnFileAcceptCallback is called when a remote peer accepts our file offer.
+type OnFileAcceptCallback func(offerID string)
+
 // SyncService manages LAN peer discovery, clipboard broadcast, and receive.
 type SyncService struct {
-	manager     *sync.Manager
-	onFileOffer OnFileOfferCallback
+	manager      *sync.Manager
+	onFileOffer  OnFileOfferCallback
+	onFileAccept OnFileAcceptCallback
 }
 
 // SetOnMessage registers a callback for non-clipboard messages (file chunks)
@@ -53,10 +58,20 @@ func (s *SyncService) SetOnFileOffer(cb OnFileOfferCallback) {
 	s.onFileOffer = cb
 }
 
+// SetOnFileAccept registers a callback when a peer accepts our file offer.
+func (s *SyncService) SetOnFileAccept(cb OnFileAcceptCallback) {
+	s.onFileAccept = cb
+}
+
+// BroadcastFileAccept sends an accept notification for an offer back to peers.
+func (s *SyncService) BroadcastFileAccept(offerID string) {
+	p := wirePayload{Type: "file_accept", OfferID: offerID}
+	data, _ := json.Marshal(p)
+	s.manager.Broadcast(data)
+}
+
 // Start begins mDNS discovery and TCP listening.
-// Received clipboard data is automatically written to the OS clipboard.
 func (s *SyncService) Start() error {
-	// Wire receive path: network -> OS clipboard or file offer
 	s.manager.SetOnReceive(func(payload []byte) {
 		var p wirePayload
 		if err := json.Unmarshal(payload, &p); err != nil {
@@ -70,12 +85,12 @@ func (s *SyncService) Start() error {
 			goclipboard.Write(goclipboard.FmtImage, p.Image)
 		case "file_offer":
 			if s.onFileOffer != nil {
-				// The sender's address isn't in the payload, but we
-				// know it from the peer map.  We use the first peer
-				// that matches the hostname — in practice there's
-				// only one per machine.
 				addr := peerAddrFromPeers(s.manager.GetPeers())
 				s.onFileOffer(p.FileName, p.FileSize, addr)
+			}
+		case "file_accept":
+			if s.onFileAccept != nil {
+				s.onFileAccept(p.OfferID)
 			}
 		}
 	})

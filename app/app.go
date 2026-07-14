@@ -2,6 +2,8 @@ package app
 
 import (
 	"log"
+	"os"
+	"path/filepath"
 
 	"mercury/app/backend/clipboard"
 	"mercury/app/backend/storage"
@@ -83,6 +85,16 @@ func (m *MercuryApp) startSync(passphrase string) {
 	m.syncSvc.SetOnFileOffer(func(fileName string, fileSize int64, peerAddr string) {
 		m.transSvc.IncomingOffer(fileName, fileSize, peerAddr)
 	})
+	// When a peer accepts our file offer, look up the file path and start sending.
+	m.syncSvc.SetOnFileAccept(func(offerID string) {
+		if fp := m.transSvc.AcceptNotification(offerID); fp != "" {
+			// Take first peer — in practice there's only one sender per offer.
+			peers := m.syncSvc.GetPeers()
+			if len(peers) > 0 {
+				m.transSvc.SendFile(peers[0]["addr"], fp)
+			}
+		}
+	})
 
 	if err := m.syncSvc.Start(); err != nil {
 		log.Printf("[mercury] sync start error: %v", err)
@@ -96,6 +108,14 @@ func (m *MercuryApp) startSync(passphrase string) {
 		}
 		switch c.Type {
 		case clipboard.ChangeText:
+			// If the text is a valid file path, offer it as a file transfer.
+			if fi, err := os.Stat(c.Text); err == nil && !fi.IsDir() {
+				name := filepath.Base(c.Text)
+				offer := m.transSvc.IncomingOffer(name, fi.Size(), "")
+				m.transSvc.StoreOutgoing(offer.ID, c.Text)
+				m.syncSvc.BroadcastFileOffer(name, fi.Size())
+				return
+			}
 			m.syncSvc.BroadcastText(c.Text)
 		case clipboard.ChangeImage:
 			m.syncSvc.BroadcastImage(c.Image)
@@ -215,7 +235,7 @@ func (m *MercuryApp) GetPendingFileOffers() []services.FileOffer {
 
 // AcceptFileOffer accepts an incoming file offer and starts receiving.
 func (m *MercuryApp) AcceptFileOffer(offerID string) string {
-	if m.transSvc == nil {
+	if m.transSvc == nil || m.syncSvc == nil {
 		return ""
 	}
 	saveDir := m.GetReceivedFolder()
@@ -227,6 +247,8 @@ func (m *MercuryApp) AcceptFileOffer(offerID string) string {
 		log.Printf("[mercury] accept offer: %v", err)
 		return ""
 	}
+	// Tell the sender we accepted so they start streaming the file.
+	m.syncSvc.BroadcastFileAccept(offerID)
 	return tid
 }
 

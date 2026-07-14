@@ -46,6 +46,16 @@ func (s *TransferService) RejectOffer(offerID string) {
 	s.mgr.RejectOffer(offerID)
 }
 
+// StoreOutgoing remembers an offer we broadcast so we can send the file when accepted.
+func (s *TransferService) StoreOutgoing(offerID, filePath string) {
+	s.mgr.StoreOutgoing(offerID, filePath)
+}
+
+// AcceptNotification is called when a remote peer accepts our offer — returns the file path.
+func (s *TransferService) AcceptNotification(offerID string) string {
+	return s.mgr.AcceptNotification(offerID)
+}
+
 // SendFile sends a file to a peer. Returns a transfer ID.
 func (s *TransferService) SendFile(peerAddr, filePath string) (string, error) {
 	return s.mgr.SendFile(peerAddr, filePath)
