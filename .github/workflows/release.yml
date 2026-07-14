@@ -93,28 +93,14 @@ jobs:
           bun-version: latest
       - name: Install Wails v3
         run: go install github.com/wailsapp/wails/v3/cmd/wails3@latest
-      - name: Generate bindings
-        run: wails3 generate bindings -ts -i -clean=true
-      - name: Build frontend
-        run: bun install && bun run build
-        working-directory: frontend
-      - name: Build for ARM64
-        run: |
-          CGO_ENABLED=1 \
-          go build -ldflags="-s -w -X mercury/app.Version=${{ github.ref_name }}" -o mercury-macos-arm64 .
-      - name: Build for AMD64
-        run: |
-          CGO_ENABLED=1 \
-          GOARCH=amd64 \
-          CC="clang -arch x86_64" \
-          CGO_CFLAGS="-mmacosx-version-min=12.0" \
-          CGO_LDFLAGS="-mmacosx-version-min=12.0" \
-          MACOSX_DEPLOYMENT_TARGET="12.0" \
-          go build -ldflags="-s -w -X mercury/app.Version=${{ github.ref_name }}" -o mercury-macos-amd64 .
+      - name: Build universal binary
+        run: wails3 task darwin:build:universal VERSION=${{ github.ref_name }}
+      - name: Copy binary
+        run: cp bin/mercury mercury-macos-universal
       - uses: actions/upload-artifact@v4
         with:
-          name: mercury-macos
-          path: mercury-macos-*
+          name: mercury-macos-universal
+          path: mercury-macos-universal
 
   build-windows:
     runs-on: windows-latest
