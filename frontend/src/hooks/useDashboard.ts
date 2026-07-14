@@ -28,6 +28,7 @@ function normalize(raw: RawDashboardState): DashboardState {
     offers: raw.offers ?? [],
     transfers: raw.transfers ?? [],
     hint: raw.hint ?? "",
+    vpnActive: raw.vpnActive ?? false,
     gnomeTrayTip: raw.gnomeTrayTip ?? false,
   };
 }

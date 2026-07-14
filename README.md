@@ -74,17 +74,42 @@ The tray appears. The frontend hot-reloads. You change code. It updates. For a m
 ### Build for Production
 
 ```bash
-GOTOOLCHAIN=go1.25.12 go build -o mercury .
+GOTOOLCHAIN=go1.25.12 wails3 task build
 ```
 
-One binary. Zero cloud accounts. Divine.
+Or platform packages:
+
+```bash
+# macOS (.app + DMG)
+wails3 task darwin:package:universal
+
+# Linux (.deb for Pop!_OS / Ubuntu)
+wails3 task linux:create:deb
+
+# Windows (NSIS installer, no console window)
+wails3 task windows:package
+```
+
+## Install from Release
+
+Download the latest release for your platform. Bundle ID everywhere: **`com.mercury.app`** (notifications and single-instance).
+
+| Platform                 | File                          | Install                                |
+| ------------------------ | ----------------------------- | -------------------------------------- |
+| macOS                    | `mercury-macos-universal.dmg` | Open DMG, drag Mercury to Applications |
+| Linux (Pop!\_OS, Ubuntu) | `mercury_*_amd64.deb`         | `sudo dpkg -i mercury_*_amd64.deb`     |
+| Windows                  | `mercury-installer.exe`       | Run installer (no terminal flash)      |
+
+**Notifications** work from installed builds (`.app`, `.deb`, NSIS). `wails3 dev` skips macOS notifications because there is no bundle ID in dev mode.
 
 ## Usage
 
 ### Tray
 
-- **Right click:** Open me, see your peers, pause, resume, quit. Left click does nothing. I have standards.
+- **Left click:** Show or hide my window. Toggle. Simple.
+- **Right click:** Open me, see your peers, pause, resume, quit.
 - **Tray icon:** I glow when I am working. Otherwise I lurk. You will forget I exist until you need me. That is the point.
+- **Second launch:** Focuses the running instance. I do not spawn ghost processes.
 
 ### Window
 
@@ -110,6 +135,24 @@ Even gods respect privacy. Mostly.
 4. **mDNS:** I announce that I exist on the LAN. No keys. No secrets. Just presence.
 5. **25MB max** for clipboard sync. If your clipboard exceeds this, you are doing something unholy and I will ignore it without comment.
 
+## Troubleshooting
+
+### Pop!\_OS / GNOME tray
+
+Pop!\_OS uses GNOME. The `.deb` installs **AppIndicator** as a required dependency so the tray icon appears. If the icon is still missing, install [AppIndicator Support](https://extensions.gnome.org/extension/615/appindicator-support/) and log out/in.
+
+After closing the window, **left-click the tray icon** or click the dock entry to reopen. Only one Mercury process runs at a time.
+
+### VPN
+
+If a VPN is active (Windscribe, Tailscale, etc.), Mercury shows a **warning on Home**. VPNs can block or skew LAN discovery. I do not fix that automatically yet. If sync fails one way, turn the VPN off and try again on the same network.
+
+### Logo
+
+The caduceus (winged staff, two snakes) is **Mercury/Hermes**, messenger of the gods. It matches my name.
+
+It is often confused with the **medical** Rod of Asclepius (one snake, no wings). I am not a hospital app. I am a courier.
+
 ## Project Structure
 
 ```
@@ -133,7 +176,7 @@ See [TODO.md](TODO.md). v0.1.0 is ready. What comes next, mortals will tell me t
 
 ### Linux packages
 
-`.deb` / `.rpm` packages declare runtime libraries in `depends:` (GTK4, WebKitGTK 6). **apt/dnf install those automatically.** The `preinstall.sh` script does not install packages. It only warns if I am already running during an upgrade. Optional GNOME tray support: `recommends: libayatana-appindicator3-1`. Install it for a tray icon on GNOME. Or do not. The window still works. I am not petty about icons.
+`.deb` packages declare runtime libraries in `depends:` (GTK4, WebKitGTK 6, **AppIndicator**). **apt installs those automatically.** The postinstall script updates the desktop database. `StartupWMClass=mercury` is set so the dock can focus the window when I am already running.
 
 ## Contributing
 

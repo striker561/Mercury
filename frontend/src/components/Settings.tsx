@@ -67,6 +67,7 @@ export default function Settings({
   return (
     <>
       <div className="section-label">{copy.settings.covenant}</div>
+      <p className="section-hint">{copy.settings.covenantHint}</p>
       <div className="group">
         <div className="group-row">
           <span className="group-row-label">{copy.settings.passphrase}</span>
@@ -99,6 +100,7 @@ export default function Settings({
             aria-label="Sync enabled"
           />
         </div>
+        <p className="row-hint">{copy.settings.syncEnabledHint}</p>
         <div className="group-row-actions">
           <button
             type="button"
@@ -118,6 +120,7 @@ export default function Settings({
       </div>
 
       <div className="section-label">{copy.settings.offerings}</div>
+      <p className="section-hint">{copy.settings.offeringsHint}</p>
       <div className="group">
         <div className="group-row">
           <span className="group-row-label">{copy.settings.saveTo}</span>
@@ -139,6 +142,7 @@ export default function Settings({
             aria-label="Accept files"
           />
         </div>
+        <p className="row-hint">{copy.settings.acceptFilesHint}</p>
         <div className="group-row" style={{ opacity: accept ? 1 : 0.45 }}>
           <span className="group-row-label">{copy.settings.autoAccept}</span>
           <button
@@ -151,9 +155,13 @@ export default function Settings({
             disabled={!accept}
           />
         </div>
+        <p className="row-hint" style={{ opacity: accept ? 1 : 0.45 }}>
+          {copy.settings.autoAcceptHint}
+        </p>
       </div>
 
       <div className="section-label">{copy.settings.presence}</div>
+      <p className="section-hint">{copy.settings.presenceHint}</p>
       <div className="group">
         <div className="group-row">
           <span className="group-row-label">{copy.settings.startOnLogin}</span>

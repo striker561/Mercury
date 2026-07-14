@@ -307,6 +307,22 @@ textarea {
   padding-left: 2px;
 }
 
+.section-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  margin: -2px 0 8px 2px;
+  max-width: 36em;
+}
+
+.row-hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  line-height: 1.4;
+  padding: 0 14px 10px;
+  margin-top: -4px;
+}
+
 .group {
   background: var(--group-bg);
   border: 1px solid var(--border);
