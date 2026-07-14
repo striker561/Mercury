@@ -261,15 +261,17 @@ jobs:
       - name: Build NSIS installer
         run: wails3 task windows:package VERSION=v${{ needs.validate-tag.outputs.version }}
 
-      - name: Prepare Windows updater binary
+      - name: Prepare Windows artifacts
         shell: bash
-        run: cp bin/mercury.exe mercury_windows_amd64.exe
+        run: |
+          cp bin/mercury.exe mercury_windows_amd64.exe
+          cp bin/mercury-amd64-installer.exe mercury-amd64-installer.exe
 
       - uses: actions/upload-artifact@v4
         with:
           name: mercury-windows-amd64
           path: |
-            bin/mercury-amd64-installer.exe
+            mercury-amd64-installer.exe
             mercury_windows_amd64.exe
 
   release:
