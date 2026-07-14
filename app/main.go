@@ -80,6 +80,7 @@ func Run(assets embed.FS) error {
 	// the tray item is invisible in the menu bar).
 	tray := app.SystemTray.New()
 	tray.SetTemplateIcon(trayIcon)
+	tray.SetDarkModeIcon(trayIcon)
 
 	// Build the right-click context menu with an "Open Mercury" item.
 	menu := system.BuildMenu(app, func() {

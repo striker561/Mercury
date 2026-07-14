@@ -1,4 +1,4 @@
-# ☿ Mercury
+# Mercury
 
 > *"I carry messages. Yours, specifically. Across your LAN. Without the clouds, without the drama, and definitely without your data ending up in a database you didn't sign up for."*
 
@@ -71,20 +71,39 @@ One binary. Zero dependencies. Divine.
 
 ## Project Structure
 
+## Brand Assets
+
+The Mercury logo is available in two variants:
+
+| Variant | File | Purpose |
+|---------|------|---------|
+| Default | `logo.png` | Tray icon (idle), favicon, social cards |
+| Active | `logo-active.png` | Tray icon (transfer in progress) |
+
+On macOS, the logo is set as a **template icon** — the system automatically inverts it (black → white in light menu bars, stays black in dark mode). On Linux, the raw PNG is used.
+
 ```
 mercury/
 ├── main.go               # Entry point. Starts the god machine.
+├── logo.png              # 🔷 Brand logo (source of truth)
+├── logo-active.png       # 🔷 Brand logo — active state
 ├── app/
 │   ├── main.go           # Application bootstrap. Wires everything together.
 │   ├── app.go            # MercuryApp — the bindings the frontend talks to.
+│   ├── icon.png          # Tray icon (resized from logo.png)
+│   ├── icon-active.png   # Tray icon active state
 │   ├── backend/
 │   │   ├── sync/         # LAN sync engine (crypto, peer mgmt, discovery, transport)
-│   │   ├── clipboard/    # Clipboard watcher
-│   │   └── transfer/     # File transfer
+│   │   ├── clipboard/    # Clipboard watcher (CGO for macOS file URLs)
+│   │   ├── fileinfo/     # File type detection and path resolution
+│   │   └── transfer/     # File transfer (sender/receiver)
 │   └── system/
 │       └── tray.go       # System tray menu builder. Small. Angry. Effective.
 ├── build/                # Build configuration. You don't need to be here.
-├── frontend/             # React + TypeScript + Vite. The pretty face.
+├── frontend/
+│   ├── public/
+│   │   └── mercury-icon.png  # Favicon
+│   └── src/              # React + TypeScript + Vite. The pretty face.
 ├── go.mod                # Dependencies. Handle with care.
 └── Taskfile.yml          # Task runner. Type `wails3 dev` and witness magic.
 ```
@@ -97,8 +116,10 @@ mercury/
 - **Right click** — Context menu. Mercury header (gods don't need interaction). Peer count (dynamic, because we're generous). Pause/Resume. Quit.
 
 The tray icon has two moods:
-- **Connected** — peers are nearby. The network is alive.
-- **Idle** — you're alone. Like always.
+- **Active** — `app/icon-active.png` used when a file transfer is in progress
+- **Idle** — `app/icon.png` (default, auto-inverts on macOS for light/dark mode)
+
+The logo (`logo.png` and `logo-active.png`) lives in the project root as the source of truth. Resized copies are placed in `app/` (tray icons) and `frontend/public/` (favicon).
 
 ### Settings
 

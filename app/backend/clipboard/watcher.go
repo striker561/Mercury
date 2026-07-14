@@ -52,6 +52,7 @@ type Watcher struct {
 	reader       Reader
 	prevText     string
 	prevImage    []byte
+	prevFileURL  string // macOS: last POSIX path from file URL reader
 	mu           sync.Mutex
 	paused       bool
 	onChange     func(Change)
@@ -129,15 +130,20 @@ func (w *Watcher) poll() {
 	// which the text-based library doesn't reliably expose).
 	if paths := readFileURLs(); len(paths) > 0 {
 		path := paths[0] // take first file for single-file offers
-		if path != w.prevText {
-			w.prevText = path
+		if path != w.prevFileURL {
+			w.prevFileURL = path
+			w.prevText = path // keep text in sync so text reader doesn't re-trigger
 			w.lastEvent = now
 			if w.onChange != nil {
 				go w.onChange(Change{Type: ChangeText, Text: path})
 			}
 			return
 		}
+		// Same file URLs still on pasteboard — skip text check too, since the
+		// text reader will see the file:// URI which is the same file.
+		return
 	}
+	w.prevFileURL = ""
 
 	// Check text.
 	if text := w.reader.ReadText(); text != w.prevText {
