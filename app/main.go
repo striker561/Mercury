@@ -158,6 +158,7 @@ func Run(assets embed.FS) error {
 			fp := mercuryApp.DashboardFingerprint()
 			if fp != last {
 				last = fp
+				mercuryApp.syncClipboardWatch()
 				app.Event.Emit("dashboard:changed")
 				updateTray(tray, refs, mercuryApp)
 			}

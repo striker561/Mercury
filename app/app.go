@@ -180,6 +180,32 @@ func (m *MercuryApp) startSync(passphrase string) {
 		return
 	}
 
+	m.syncClipboardWatch()
+}
+
+func (m *MercuryApp) shouldWatchClipboard() bool {
+	if m.syncSvc == nil || m.GetSavedPassphrase() == "" || m.IsPaused() {
+		return false
+	}
+	return m.GetPeerCount() > 0
+}
+
+// syncClipboardWatch starts clipboard monitoring only when peers are connected.
+// No passphrase, no peers, or paused — Mercury rests. No polling.
+func (m *MercuryApp) syncClipboardWatch() {
+	if !m.shouldWatchClipboard() {
+		if m.clipSvc != nil {
+			m.clipSvc.Stop()
+			m.clipSvc = nil
+		}
+		return
+	}
+	if m.clipSvc == nil {
+		m.startClipboardWatcher()
+	}
+}
+
+func (m *MercuryApp) startClipboardWatcher() {
 	m.clipSvc = services.NewClipboardService()
 	m.clipSvc.Start(func(c clipboard.Change) {
 		if m.db != nil && m.db.IsPaused() {
@@ -187,8 +213,6 @@ func (m *MercuryApp) startSync(passphrase string) {
 		}
 		switch c.Type {
 		case clipboard.ChangeText:
-			// Use the fileinfo domain layer to detect file paths
-			// (handles file:// URIs from macOS/Linux file managers).
 			if fi := fileinfo.Detect(c.Text); fi != nil {
 				log.Printf("[mercury] detected file: %s (%d bytes, %s)", fi.Name, fi.Size, fi.Category)
 				id := m.transSvc.NewOfferID()
@@ -217,13 +241,6 @@ func (m *MercuryApp) TogglePause() bool {
 	paused = !paused
 	if m.db != nil {
 		m.db.SetPaused(paused)
-	}
-	if m.clipSvc != nil {
-		if paused {
-			m.clipSvc.Pause()
-		} else {
-			m.clipSvc.Resume()
-		}
 	}
 	m.notifyChange()
 	return paused

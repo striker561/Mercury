@@ -4,6 +4,7 @@ package services
 
 import (
 	"context"
+	"time"
 
 	"mercury/app/backend/clipboard"
 )
@@ -34,6 +35,13 @@ func (s *ClipboardService) Start(onChange func(clipboard.Change)) {
 func (s *ClipboardService) Stop() {
 	if s.stopWatch != nil {
 		s.stopWatch()
+	}
+}
+
+// SetPollInterval adjusts clipboard polling frequency.
+func (s *ClipboardService) SetPollInterval(d time.Duration) {
+	if s.watcher != nil {
+		s.watcher.SetPollInterval(d)
 	}
 }
 

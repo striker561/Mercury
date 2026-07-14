@@ -79,6 +79,23 @@ func newWatcherWithReader(r Reader) *Watcher {
 	}
 }
 
+// SetPollInterval changes how often the clipboard is polled.
+func (w *Watcher) SetPollInterval(d time.Duration) {
+	w.mu.Lock()
+	if d < 50*time.Millisecond {
+		d = 50 * time.Millisecond
+	}
+	w.pollInterval = d
+	w.mu.Unlock()
+}
+
+// PollInterval returns the current poll interval.
+func (w *Watcher) PollInterval() time.Duration {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.pollInterval
+}
+
 // OnChange registers a callback for clipboard changes. Must be called before Start.
 func (w *Watcher) OnChange(cb func(Change)) {
 	w.onChange = cb
@@ -108,6 +125,10 @@ func (w *Watcher) Start(ctx context.Context) {
 			return
 		case <-ticker.C:
 			w.poll()
+			w.mu.Lock()
+			next := w.pollInterval
+			w.mu.Unlock()
+			ticker.Reset(next)
 		}
 	}
 }

@@ -15,6 +15,7 @@ type DashboardState struct {
 	Offers        []services.FileOffer    `json:"offers"`
 	Transfers     []services.FileProgress `json:"transfers"`
 	Hint          string                  `json:"hint"`
+	VpnActive     bool                    `json:"vpnActive"`
 	GnomeTrayTip  bool                    `json:"gnomeTrayTip"`
 }
 
@@ -45,6 +46,7 @@ func (m *MercuryApp) GetDashboardState() DashboardState {
 		Offers:        offers,
 		Transfers:     active,
 		Hint:          m.dashboardHint(len(peers)),
+		VpnActive:     vpnActive(),
 		GnomeTrayTip:  m.gnomeTray,
 	}
 }
@@ -61,23 +63,45 @@ func (m *MercuryApp) dashboardHint(peerCount int) string {
 
 // DashboardFingerprint returns a compact string used to detect UI-relevant changes.
 func (m *MercuryApp) DashboardFingerprint() string {
-	s := m.GetDashboardState()
 	var b strings.Builder
-	fmt.Fprintf(&b, "p=%d paused=%v pass=%v", len(s.Peers), s.Paused, s.HasPassphrase)
-	for _, p := range s.Peers {
-		fmt.Fprintf(&b, " %s@%s", p["id"], p["addr"])
+	peerCount := 0
+	if m.syncSvc != nil {
+		peers := m.syncSvc.GetPeers()
+		peerCount = len(peers)
+		fmt.Fprintf(&b, "p=%d", peerCount)
+		for _, p := range peers {
+			fmt.Fprintf(&b, " %s@%s", p["id"], p["addr"])
+		}
+	} else {
+		b.WriteString("p=0")
 	}
-	for _, o := range s.Offers {
+
+	paused := m.IsPaused()
+	hasPass := m.GetSavedPassphrase() != ""
+	fmt.Fprintf(&b, " paused=%v pass=%v", paused, hasPass)
+
+	offers := m.GetPendingFileOffers()
+	if offers == nil {
+		offers = []services.FileOffer{}
+	}
+	for _, o := range offers {
 		fmt.Fprintf(&b, " o=%s", o.ID)
 	}
-	for _, t := range s.Transfers {
-		fmt.Fprintf(&b, " t=%s:%s:%d", t.ID, t.Status, t.Received)
+
+	transfers := m.GetTransferProgress()
+	for _, t := range transfers {
+		if t.Status != "done" {
+			fmt.Fprintf(&b, " t=%s:%s:%d", t.ID, t.Status, t.Received)
+		}
 	}
-	fmt.Fprintf(&b, " hint=%q gnome=%v active=%v", s.Hint, s.GnomeTrayTip, m.trayActive())
+
+	hint := m.dashboardHint(peerCount)
+	fmt.Fprintf(&b, " hint=%q vpn=%v gnome=%v active=%v", hint, vpnActive(), m.gnomeTray, m.trayActive())
 	return b.String()
 }
 
 func (m *MercuryApp) notifyChange() {
+	m.syncClipboardWatch()
 	if m.emitChange != nil {
 		m.emitChange()
 	}
