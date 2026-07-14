@@ -5,8 +5,6 @@ import (
 
 	"mercury/app/backend/clipboard"
 	"mercury/app/backend/storage"
-	"mercury/app/backend/transfer"
-	"mercury/app/backend/sync"
 	"mercury/app/services"
 
 	goclipboard "golang.design/x/clipboard"
@@ -14,10 +12,10 @@ import (
 
 // MercuryApp is the main application struct exposed to the Wails frontend.
 type MercuryApp struct {
-	syncSvc    *services.SyncService
-	clipSvc    *services.ClipboardService
-	db         *storage.DB
-	transferMgr *transfer.Manager
+	syncSvc *services.SyncService
+	clipSvc *services.ClipboardService
+	db      *storage.DB
+	transSvc *services.TransferService
 }
 
 // NewMercuryApp creates a new MercuryApp instance and opens the settings DB.
@@ -74,17 +72,21 @@ func (m *MercuryApp) startSync(passphrase string) {
 	}
 
 	m.syncSvc = services.NewSyncService(passphrase)
+
+	// Wire file chunk routing: sync listener → transfer service.
+	key := services.DeriveKey(passphrase)
+	m.transSvc = services.NewTransferService(key)
+	m.syncSvc.SetOnFileChunk(func(chunk []byte) {
+		m.transSvc.ChunkChan() <- chunk
+	})
+	m.syncSvc.SetOnFileOffer(func(fileName string, fileSize int64, peerAddr string) {
+		m.transSvc.IncomingOffer(fileName, fileSize, peerAddr)
+	})
+
 	if err := m.syncSvc.Start(); err != nil {
 		log.Printf("[mercury] sync start error: %v", err)
 		return
 	}
-
-	// Wire file transfer manager.
-	key := sync.DeriveKey(passphrase)
-	m.transferMgr = transfer.NewManager(key)
-	m.syncSvc.SetOnFileOffer(func(fileName string, fileSize int64, peerAddr string) {
-		m.transferMgr.IncomingOffer(fileName, fileSize, peerAddr)
-	})
 
 	m.clipSvc = services.NewClipboardService()
 	m.clipSvc.Start(func(c clipboard.Change) {
@@ -203,23 +205,23 @@ func (m *MercuryApp) DetectGNOME() bool {
 // ─── File Transfer IPC ──────────────────────────────────────────────
 
 // GetPendingFileOffers returns all file offers that haven't been acted on.
-func (m *MercuryApp) GetPendingFileOffers() []transfer.Offer {
-	if m.transferMgr == nil {
+func (m *MercuryApp) GetPendingFileOffers() []services.FileOffer {
+	if m.transSvc == nil {
 		return nil
 	}
-	return m.transferMgr.PendingOffers()
+	return m.transSvc.PendingOffers()
 }
 
 // AcceptFileOffer accepts an incoming file offer and starts receiving.
 func (m *MercuryApp) AcceptFileOffer(offerID string) string {
-	if m.transferMgr == nil {
+	if m.transSvc == nil {
 		return ""
 	}
 	saveDir := m.GetReceivedFolder()
 	if saveDir == "" {
 		saveDir = "~/Mercury"
 	}
-	tid, err := m.transferMgr.AcceptOffer(offerID, saveDir)
+	tid, err := m.transSvc.AcceptOffer(offerID, saveDir)
 	if err != nil {
 		log.Printf("[mercury] accept offer: %v", err)
 		return ""
@@ -229,17 +231,17 @@ func (m *MercuryApp) AcceptFileOffer(offerID string) string {
 
 // RejectFileOffer rejects an incoming file offer.
 func (m *MercuryApp) RejectFileOffer(offerID string) {
-	if m.transferMgr != nil {
-		m.transferMgr.RejectOffer(offerID)
+	if m.transSvc != nil {
+		m.transSvc.RejectOffer(offerID)
 	}
 }
 
 // SendFile sends a file to a peer.  Returns the transfer ID.
 func (m *MercuryApp) SendFile(peerAddr, filePath string) string {
-	if m.transferMgr == nil {
+	if m.transSvc == nil {
 		return ""
 	}
-	tid, err := m.transferMgr.SendFile(peerAddr, filePath)
+	tid, err := m.transSvc.SendFile(peerAddr, filePath)
 	if err != nil {
 		log.Printf("[mercury] send file: %v", err)
 		return ""
@@ -248,9 +250,9 @@ func (m *MercuryApp) SendFile(peerAddr, filePath string) string {
 }
 
 // GetTransferProgress returns progress for all active transfers.
-func (m *MercuryApp) GetTransferProgress() []transfer.Progress {
-	if m.transferMgr == nil {
+func (m *MercuryApp) GetTransferProgress() []services.FileProgress {
+	if m.transSvc == nil {
 		return nil
 	}
-	return m.transferMgr.AllProgress()
+	return m.transSvc.AllProgress()
 }

@@ -11,29 +11,43 @@ import (
 )
 
 const (
-	// Port is the TCP port used for clipboard sync traffic.
+	// Port is the single TCP port for all Mercury traffic (clipboard + file).
 	Port = 47821
 
-	// maxPayloadSize is the maximum allowed payload in bytes (25 MB).
-	maxPayloadSize = 25 * 1024 * 1024
+	// Message type byte values.
+	MsgClipboard = 0 // encrypted clipboard payload (text/image)
+	MsgFileChunk = 1 // encrypted file chunk (no size limit)
 
-	// sendTimeout is the timeout for a single Send operation (LAN, should
-	// complete in <1s even for 25MB; 5s is generous).
+	// maxClipboardSize is the max clipboard payload (25 MB). File chunks
+	// bypass this limit — they stream on the same port but type 1.
+	maxClipboardSize = 25 * 1024 * 1024
+
 	sendTimeout = 5 * time.Second
 )
 
-// Send dials a peer and sends a length-prefixed payload.  The wire format is:
+// Wire format for ALL messages on port 47821:
 //
-//	[4 bytes big-endian uint32 payload length][payload bytes]
+//	[1 byte message type][4 bytes big-endian uint32 payload length][payload bytes]
 //
-// The payload is expected to already be encrypted.  The connection is closed
-// after the write completes.  Failed sends are logged and return an error.
+// Type 0 (clipboard): payload is encrypted text/image data.
+// Type 1 (file chunk): payload is an encrypted 256 KiB file chunk.
+//
+// The type byte is NOT encrypted — it's only a routing hint. The payload
+// is always AES-256-GCM encrypted. Even on a single port, clipboard sync
+// and file transfers are independent: the event loop demuxes by type.
+
+// Send dials a peer and sends a clipboard payload (type 0).
 func Send(ctx context.Context, addr string, payload []byte) error {
-	if len(payload) > maxPayloadSize {
-		return fmt.Errorf("sync send: payload too large (%d > %d)", len(payload), maxPayloadSize)
+	return SendMsg(ctx, addr, MsgClipboard, payload)
+}
+
+// SendMsg dials a peer and sends a payload with the given message type.
+// The wire format is [1 byte type][4 bytes length][payload bytes].
+func SendMsg(ctx context.Context, addr string, msgType byte, payload []byte) error {
+	if msgType == MsgClipboard && len(payload) > maxClipboardSize {
+		return fmt.Errorf("sync send: clipboard payload too large (%d > %d)", len(payload), maxClipboardSize)
 	}
 
-	// Hard 2-second dial timeout as per spec — never use the OS default.
 	dialer := &net.Dialer{Timeout: 2 * time.Second}
 	conn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
@@ -41,39 +55,33 @@ func Send(ctx context.Context, addr string, payload []byte) error {
 	}
 	defer conn.Close()
 
-	// Apply a write deadline relative to ctx deadline.
 	if deadline, ok := ctx.Deadline(); ok {
 		conn.SetWriteDeadline(deadline)
 	} else {
 		conn.SetWriteDeadline(time.Now().Add(sendTimeout))
 	}
 
-	// Write length prefix.
-	header := make([]byte, 4)
-	binary.BigEndian.PutUint32(header, uint32(len(payload)))
-	if _, err := conn.Write(header); err != nil {
-		return fmt.Errorf("sync send header to %s: %w", addr, err)
-	}
+	// Write: [type byte][4-byte length][payload]
+	buf := make([]byte, 1+4+len(payload))
+	buf[0] = msgType
+	binary.BigEndian.PutUint32(buf[1:5], uint32(len(payload)))
+	copy(buf[5:], payload)
 
-	// Write payload.
-	if _, err := conn.Write(payload); err != nil {
-		return fmt.Errorf("sync send payload to %s: %w", addr, err)
+	if _, err := conn.Write(buf); err != nil {
+		return fmt.Errorf("sync send to %s: %w", addr, err)
 	}
-
 	return nil
 }
 
-// Listen starts a TCP listener on the given port and pushes incoming
-// payloads (raw bytes, still encrypted) onto the incoming channel.
-// The listener runs until ctx is cancelled.  Each connection is handled
-// in a short-lived goroutine that reads one payload and closes.
-func Listen(ctx context.Context, port int, incoming chan<- []byte) error {
+// Listen starts a TCP listener on the given port and routes incoming
+// messages by type: clipboard payloads go to incoming, file chunks go
+// to fileChunks.  The listener runs until ctx is cancelled.
+func Listen(ctx context.Context, port int, incoming chan<- []byte, fileChunks chan<- []byte) error {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return fmt.Errorf("sync listen: %w", err)
 	}
 
-	// Shutdown the listener when ctx is cancelled.
 	go func() {
 		<-ctx.Done()
 		listener.Close()
@@ -82,39 +90,40 @@ func Listen(ctx context.Context, port int, incoming chan<- []byte) error {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			// If the context was cancelled, shut down cleanly.
 			if ctx.Err() != nil {
 				return nil
 			}
 			log.Printf("[sync] accept error: %v", err)
 			continue
 		}
-
-		go handleConnection(conn, incoming)
+		go handleConnection(conn, incoming, fileChunks)
 	}
 }
 
-// handleConnection reads a single length-prefixed payload from a client
-// connection and pushes it onto the incoming channel.
-func handleConnection(conn net.Conn, incoming chan<- []byte) {
+// handleConnection reads one message from a connection and routes it.
+func handleConnection(conn net.Conn, incoming chan<- []byte, fileChunks chan<- []byte) {
 	defer conn.Close()
 
 	// Set a read deadline so slow clients don't hold us up.
 	conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 
-	// Read 4-byte length prefix.
-	header := make([]byte, 4)
+	// Read [1 byte type][4 bytes length].
+	header := make([]byte, 5)
 	if _, err := io.ReadFull(conn, header); err != nil {
-		// EOF is expected — it's the heartbeat closing the connection
-		// or a keepalive probe.  No need to log it.
 		if err != io.EOF {
 			log.Printf("[sync] read header: %v", err)
 		}
 		return
 	}
 
-	payloadLen := binary.BigEndian.Uint32(header)
-	if payloadLen > maxPayloadSize {
+	msgType := header[0]
+	payloadLen := binary.BigEndian.Uint32(header[1:5])
+
+	if msgType == MsgClipboard && payloadLen > maxClipboardSize {
+		log.Printf("[sync] clipboard payload too large: %d", payloadLen)
+		return
+	}
+	if payloadLen > 10*1024*1024 {
 		log.Printf("[sync] payload too large: %d", payloadLen)
 		return
 	}
@@ -126,10 +135,18 @@ func handleConnection(conn net.Conn, incoming chan<- []byte) {
 		return
 	}
 
-	// Push to incoming channel (non-blocking with ctx via the caller).
-	select {
-	case incoming <- payload:
-	default:
-		log.Printf("[sync] dropped incoming payload (channel full)")
+	switch msgType {
+	case MsgClipboard:
+		select {
+		case incoming <- payload:
+		default:
+			log.Printf("[sync] dropped clipboard payload (channel full)")
+		}
+	case MsgFileChunk:
+		select {
+		case fileChunks <- payload:
+		default:
+			log.Printf("[sync] dropped file chunk (channel full)")
+		}
 	}
 }

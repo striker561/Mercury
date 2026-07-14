@@ -29,11 +29,21 @@ type SyncService struct {
 	onFileOffer OnFileOfferCallback
 }
 
+// SetOnFileChunk registers a callback for incoming file chunks.
+func (s *SyncService) SetOnFileChunk(cb sync.OnFileChunkCallback) {
+	s.manager.SetOnFileChunk(cb)
+}
+
 // NewSyncService creates a sync service with the given passphrase.
 func NewSyncService(passphrase string) *SyncService {
 	return &SyncService{
 		manager: sync.NewManager(passphrase),
 	}
+}
+
+// DeriveKey derives the encryption key from the passphrase (re-exports sync.DeriveKey).
+func DeriveKey(passphrase string) []byte {
+	return sync.DeriveKey(passphrase)
 }
 
 // SetOnFileOffer registers a callback for incoming file offers.

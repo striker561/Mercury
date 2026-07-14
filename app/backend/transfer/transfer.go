@@ -27,12 +27,8 @@ import (
 )
 
 const (
-	// Port is the default TCP port for file data transfer.
-	Port = 47822
-
 	chunkSize   = 256 * 1024 // 256 KiB per chunk
 	dialTimeout = 5 * time.Second
-	readTimeout = 60 * time.Second
 )
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -76,6 +72,10 @@ type Manager struct {
 	transfers map[string]*Progress
 	nextID    atomic.Int64
 
+	// chunkBuf receives encrypted file chunks from the sync manager.
+	// receiveFile reads from it and writes to disk.
+	chunkBuf chan []byte
+
 	// OnOffer is called when a file offer arrives from the network.
 	OnOffer func(o Offer)
 }
@@ -86,7 +86,14 @@ func NewManager(key []byte) *Manager {
 		key:       key,
 		offers:    make(map[string]*Offer),
 		transfers: make(map[string]*Progress),
+		chunkBuf:  make(chan []byte, 20),
 	}
+}
+
+// ChunkChan returns the channel where file chunks should be sent.
+// The app wires this by feeding decrypted chunks from the sync manager.
+func (m *Manager) ChunkChan() chan<- []byte {
+	return m.chunkBuf
 }
 
 // newID returns a random hex identifier for offers and transfers.
