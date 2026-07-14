@@ -6,7 +6,7 @@ bin/
 frontend/dist/*
 !frontend/dist/.gitkeep
 frontend/node_modules/
-frontend/bindings/
+# frontend/bindings/ is committed — needed by Vite plugin at startup
 
 # Build artifacts
 build/linux/appimage/build/
