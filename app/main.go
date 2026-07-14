@@ -137,11 +137,11 @@ func Run(assets embed.FS) error {
 	refs.Pause.OnClick(func(ctx *application.Context) {
 		paused := mercuryApp.TogglePause()
 		if paused {
-			refs.Pause.SetLabel("Resume Sync")
-			tray.SetTooltip("Mercury - Paused")
+			refs.Pause.SetLabel("Awaken")
+			tray.SetTooltip("Mercury - Resting")
 		} else {
-			refs.Pause.SetLabel("Pause Sync")
-			tray.SetTooltip("Mercury - Running")
+			refs.Pause.SetLabel("Rest")
+			tray.SetTooltip("Mercury - In service")
 		}
 		updateTray(tray, refs, mercuryApp)
 	})
@@ -200,11 +200,11 @@ func updateTray(tray *application.SystemTray, refs *system.MenuRefs, mercuryApp 
 	paused := mercuryApp.IsPaused()
 	var status string
 	if paused {
-		status = "⏸ Paused"
+		status = "⏸ Resting"
 	} else if n > 0 {
-		status = fmt.Sprintf("● Connected (%d peer%s)", n, map[bool]string{true: "", false: "s"}[n == 1])
+		status = fmt.Sprintf("● In service (%d peer%s)", n, map[bool]string{true: "", false: "s"}[n == 1])
 	} else {
-		status = "○ Idle (0 peers)"
+		status = "○ Awaiting fleet"
 	}
 	refs.Status.SetLabel(status)
 }

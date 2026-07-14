@@ -1,4 +1,5 @@
 import { Devices } from "@phosphor-icons/react";
+import { copy } from "../copy";
 import type { Peer } from "../types/mercury";
 
 interface Props {
@@ -6,7 +7,7 @@ interface Props {
 }
 
 function peerLabel(peer: Peer): string {
-  return peer.hostname || peer.id || "Unknown device";
+  return peer.hostname || peer.id || copy.peers.unknown;
 }
 
 function peerIP(addr: string): string {
@@ -16,15 +17,13 @@ function peerIP(addr: string): string {
 export default function PeerList({ peers }: Props) {
   return (
     <div>
-      <div className="section-label">Devices</div>
+      <div className="section-label">{copy.peers.section}</div>
       <div className="group">
         {peers.length === 0 ? (
           <div className="empty-state">
             <Devices size={28} className="empty-state-icon" aria-hidden />
-            <p>No devices on your network</p>
-            <p className="hint">
-              Peers appear automatically when Mercury is running elsewhere.
-            </p>
+            <p>{copy.peers.empty}</p>
+            <p className="hint">{copy.peers.emptyHint}</p>
           </div>
         ) : (
           <ul className="peer-list">

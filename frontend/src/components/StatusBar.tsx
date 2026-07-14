@@ -1,3 +1,4 @@
+import { copy } from "../copy";
 import type { DashboardState } from "../types/mercury";
 
 interface Props {
@@ -12,17 +13,17 @@ export default function StatusBar({ state }: Props) {
   let sub: string;
 
   if (paused) {
-    title = "Paused";
-    sub = "Clipboard sync is paused. Resume in Settings when ready.";
+    title = copy.status.pausedTitle;
+    sub = copy.status.pausedSub;
   } else if (hint) {
-    title = "Sync issue";
+    title = copy.status.issueTitle;
     sub = hint;
   } else if (count > 0) {
-    title = `Connected · ${count} device${count === 1 ? "" : "s"}`;
-    sub = "Copy on one machine, paste on another.";
+    title = copy.status.connectedTitle(count);
+    sub = copy.status.connectedSub;
   } else {
-    title = "Waiting for peers";
-    sub = "Make sure other devices run Mercury with the same passphrase.";
+    title = copy.status.waitingTitle;
+    sub = copy.status.waitingSub;
   }
 
   return (
@@ -31,7 +32,7 @@ export default function StatusBar({ state }: Props) {
       <div className={`status-bar-sub${hint ? " warn" : ""}`}>{sub}</div>
       {gnomeTrayTip && !hint && (
         <div className="status-bar-sub" style={{ marginTop: 6 }}>
-          GNOME: install AppIndicator for tray support, or use this window.
+          {copy.status.gnomeTip}
         </div>
       )}
     </div>

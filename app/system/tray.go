@@ -6,8 +6,8 @@ import (
 
 // MenuRefs holds live menu items so the caller can update labels/actions.
 type MenuRefs struct {
-	Status  *application.MenuItem
-	Pause   *application.MenuItem
+	Status *application.MenuItem
+	Pause  *application.MenuItem
 }
 
 // BuildMenu creates the right-click context menu for the system tray.
@@ -30,12 +30,12 @@ func BuildMenu(app *application.App, showFn func()) (*application.Menu, *MenuRef
 	menu.AddSeparator()
 
 	// Dynamic status item (disabled, shows peer count)
-	statusItem := menu.Add("● Idle (0 peers)").SetEnabled(false)
+	statusItem := menu.Add("○ Awaiting fleet").SetEnabled(false)
 
 	menu.AddSeparator()
 
 	// Pause/Resume toggle
-	pauseItem := menu.Add("Pause Sync")
+	pauseItem := menu.Add("Rest")
 	pauseItem.OnClick(func(ctx *application.Context) {
 		// Wired via app-level event binding in main.go
 	})

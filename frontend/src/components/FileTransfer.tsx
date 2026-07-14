@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { File, Image as ImageIcon } from "@phosphor-icons/react";
 import { MercuryApp } from "../../bindings/mercury/app";
+import { copy } from "../copy";
 import type { FileOffer, FileProgress } from "../types/mercury";
 
 interface Props {
@@ -59,7 +60,7 @@ export default function FileTransfer({ offers, transfers, onChange }: Props) {
 
   return (
     <div>
-      <div className="section-label">Transfers</div>
+      <div className="section-label">{copy.transfers.section}</div>
       {offers.map((offer) => (
         <div key={offer.id} className="transfer-card">
           <div className="transfer-header">
@@ -67,7 +68,7 @@ export default function FileTransfer({ offers, transfers, onChange }: Props) {
             <div className="transfer-info">
               <div className="transfer-name">{offer.file_name}</div>
               <div className="transfer-meta">
-                {formatSize(offer.file_size)} · incoming
+                {formatSize(offer.file_size)} · {copy.transfers.incoming}
               </div>
             </div>
           </div>
@@ -77,14 +78,14 @@ export default function FileTransfer({ offers, transfers, onChange }: Props) {
               className="btn btn-outline btn-sm"
               onClick={() => reject(offer.id)}
             >
-              Decline
+              {copy.transfers.decline}
             </button>
             <button
               type="button"
               className="btn btn-primary btn-sm"
               onClick={() => accept(offer.id)}
             >
-              Accept
+              {copy.transfers.accept}
             </button>
           </div>
         </div>
@@ -123,7 +124,7 @@ export default function FileTransfer({ offers, transfers, onChange }: Props) {
                   className="btn btn-ghost btn-sm"
                   onClick={() => cancel(t.id)}
                 >
-                  Cancel
+                  {copy.transfers.cancel}
                 </button>
               </div>
             )}

@@ -54,7 +54,7 @@ func (m *MercuryApp) dashboardHint(peerCount int) string {
 		return ""
 	}
 	if m.syncSvc != nil && m.syncSvc.DecryptFailCount() >= 3 {
-		return "Passphrase may not match another device. Use the same secret in Settings on every machine."
+		return "Your passphrase does not match another device. Same secret on every machine, or I cannot deliver."
 	}
 	return ""
 }

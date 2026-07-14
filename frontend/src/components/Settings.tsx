@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Eye, EyeSlash } from "@phosphor-icons/react";
 import { MercuryApp } from "../../bindings/mercury/app";
+import { copy } from "../copy";
 import type { AppSettings } from "../types/mercury";
 
 interface Props {
@@ -65,17 +66,17 @@ export default function Settings({
 
   return (
     <>
-      <div className="section-label">Sync</div>
+      <div className="section-label">{copy.settings.covenant}</div>
       <div className="group">
         <div className="group-row">
-          <span className="group-row-label">Passphrase</span>
+          <span className="group-row-label">{copy.settings.passphrase}</span>
           <div className="passphrase-wrap">
             <input
               ref={inputRef}
               type={show ? "text" : "password"}
               value={pass}
               onChange={(e) => setPass(e.target.value)}
-              placeholder="Shared secret"
+              placeholder={copy.settings.passphrasePlaceholder}
               aria-label="Passphrase"
             />
             <button
@@ -88,7 +89,7 @@ export default function Settings({
           </div>
         </div>
         <div className="group-row">
-          <span className="group-row-label">Sync enabled</span>
+          <span className="group-row-label">{copy.settings.syncEnabled}</span>
           <button
             type="button"
             className={`toggle${!paused ? " on" : ""}`}
@@ -105,30 +106,30 @@ export default function Settings({
             onClick={save}
             disabled={!pass}
           >
-            Save passphrase
+            {copy.settings.save}
           </button>
           <span
             className={`save-feedback${saved ? " visible" : ""}`}
             aria-live="polite"
           >
-            Saved
+            {copy.settings.saved}
           </span>
         </div>
       </div>
 
-      <div className="section-label">Files</div>
+      <div className="section-label">{copy.settings.offerings}</div>
       <div className="group">
         <div className="group-row">
-          <span className="group-row-label">Save to</span>
+          <span className="group-row-label">{copy.settings.saveTo}</span>
           <span className="group-row-value" title={folder}>
             {folder}
           </span>
           <button type="button" className="btn btn-ghost btn-sm" onClick={pick}>
-            Change
+            {copy.settings.change}
           </button>
         </div>
         <div className="group-row">
-          <span className="group-row-label">Accept files</span>
+          <span className="group-row-label">{copy.settings.acceptFiles}</span>
           <button
             type="button"
             className={`toggle${accept ? " on" : ""}`}
@@ -139,7 +140,7 @@ export default function Settings({
           />
         </div>
         <div className="group-row" style={{ opacity: accept ? 1 : 0.45 }}>
-          <span className="group-row-label">Auto-accept</span>
+          <span className="group-row-label">{copy.settings.autoAccept}</span>
           <button
             type="button"
             className={`toggle${auto ? " on" : ""}`}
@@ -152,10 +153,10 @@ export default function Settings({
         </div>
       </div>
 
-      <div className="section-label">General</div>
+      <div className="section-label">{copy.settings.presence}</div>
       <div className="group">
         <div className="group-row">
-          <span className="group-row-label">Start on login</span>
+          <span className="group-row-label">{copy.settings.startOnLogin}</span>
           <button
             type="button"
             className={`toggle${startup ? " on" : ""}`}

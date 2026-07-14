@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { X } from "@phosphor-icons/react";
 import { MercuryApp } from "../bindings/mercury/app";
+import { copy } from "./copy";
 import { useDashboard } from "./hooks/useDashboard";
 import { useMercuryEvents } from "./hooks/useMercuryEvents";
 import Settings from "./components/Settings";
@@ -26,10 +27,10 @@ function App() {
       : "status-dot idle";
 
   const statusLabel = paused
-    ? "Paused"
+    ? copy.header.paused
     : peers.length > 0
-      ? `${peers.length} peer${peers.length === 1 ? "" : "s"}`
-      : "Idle";
+      ? copy.header.peers(peers.length)
+      : copy.header.idle;
 
   const handleGetStarted = useCallback(() => {
     setTab("settings");
