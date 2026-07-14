@@ -2,12 +2,11 @@ package app
 
 import (
 	"log"
-	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"mercury/app/backend/clipboard"
+	"mercury/app/backend/fileinfo"
 	"mercury/app/backend/storage"
 	"mercury/app/services"
 
@@ -95,10 +94,7 @@ func (m *MercuryApp) startSync(passphrase string) {
 		m.transSvc.IncomingOfferWithID(offerID, fileName, fileSize, peerAddr)
 		// Auto-accept if the setting is on.
 		if m.db != nil && m.db.GetDefaulted(storage.KeyAutoAccept) == "true" {
-			saveDir := m.GetReceivedFolder()
-			if saveDir == "" {
-				saveDir = "~/Mercury"
-			}
+			saveDir := resolvePath(m.GetReceivedFolder())
 			m.transSvc.AcceptOffer(offerID, saveDir)
 		}
 	})
@@ -126,22 +122,13 @@ func (m *MercuryApp) startSync(passphrase string) {
 		}
 		switch c.Type {
 		case clipboard.ChangeText:
-			filePath := c.Text
-			// macOS Finder copies file:// URIs; Linux file managers often do too.
-			if strings.HasPrefix(filePath, "file://") {
-				if u, err := url.Parse(filePath); err == nil {
-					filePath = u.Path
-				}
-			}
-			// If the text is a valid file path, offer it as a file transfer.
-			if fi, err := os.Stat(filePath); err == nil && !fi.IsDir() {
-				name := filepath.Base(filePath)
-				log.Printf("[mercury] detected file path: %s (%d bytes)", name, fi.Size())
-				// Generate an offer ID and broadcast it so the receiver uses the
-				// same ID — when they file_accept, we can look up the file path.
+			// Use the fileinfo domain layer to detect file paths
+			// (handles file:// URIs from macOS/Linux file managers).
+			if fi := fileinfo.Detect(c.Text); fi != nil {
+				log.Printf("[mercury] detected file: %s (%d bytes, %s)", fi.Name, fi.Size, fi.Category)
 				id := m.transSvc.NewOfferID()
-				m.transSvc.StoreOutgoing(id, filePath)
-				m.syncSvc.BroadcastFileOffer(id, name, fi.Size())
+				m.transSvc.StoreOutgoing(id, fi.Path)
+				m.syncSvc.BroadcastFileOffer(id, fi.Name, fi.Size)
 				return
 			}
 			log.Printf("[mercury] clipboard text: %d chars", len(c.Text))
@@ -248,6 +235,23 @@ func (m *MercuryApp) GetReceivedFolder() string {
 	return m.GetSetting(storage.KeyReceivedFolder)
 }
 
+// resolvePath expands a leading ~/ to the current user's home directory.
+// This is needed because Go's os package does not interpret tilde.
+func resolvePath(p string) string {
+	if p == "" {
+		p = "~/Mercury"
+	}
+	if strings.HasPrefix(p, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			log.Printf("[mercury] resolve home dir: %v", err)
+			return p
+		}
+		return home + p[1:]
+	}
+	return p
+}
+
 // DetectGNOME returns true if running under GNOME desktop.
 func (m *MercuryApp) DetectGNOME() bool {
 	return false
@@ -268,10 +272,7 @@ func (m *MercuryApp) AcceptFileOffer(offerID string) string {
 	if m.transSvc == nil || m.syncSvc == nil {
 		return ""
 	}
-	saveDir := m.GetReceivedFolder()
-	if saveDir == "" {
-		saveDir = "~/Mercury"
-	}
+	saveDir := resolvePath(m.GetReceivedFolder())
 	tid, err := m.transSvc.AcceptOffer(offerID, saveDir)
 	if err != nil {
 		log.Printf("[mercury] accept offer: %v", err)
