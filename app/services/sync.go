@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 
@@ -30,9 +31,12 @@ type OnFileAcceptCallback func(offerID string)
 
 // SyncService manages LAN peer discovery, clipboard broadcast, and receive.
 type SyncService struct {
-	manager      *sync.Manager
-	onFileOffer  OnFileOfferCallback
-	onFileAccept OnFileAcceptCallback
+	manager       *sync.Manager
+	onFileOffer   OnFileOfferCallback
+	onFileAccept  OnFileAcceptCallback
+	onResync      func()
+	resyncAllowed func() bool
+	watchCancel   context.CancelFunc
 }
 
 // SetOnMessage registers a callback for non-clipboard messages (file chunks)
@@ -71,7 +75,50 @@ func (s *SyncService) BroadcastFileAccept(offerID string) {
 	s.manager.Broadcast(data)
 }
 
-// Start begins mDNS discovery and TCP listening.
+// SetOnResync registers a callback fired after an automatic resync, so the
+// app layer can refresh the UI.
+func (s *SyncService) SetOnResync(cb func()) {
+	s.onResync = cb
+}
+
+// SetResyncAllowed registers a predicate that must return true for automatic
+// resyncs to proceed.  The app uses it to skip resync while a file transfer
+// is active — the shared TCP listener would be restarted mid-stream.
+func (s *SyncService) SetResyncAllowed(fn func() bool) {
+	s.resyncAllowed = fn
+}
+
+// Resync restarts discovery immediately.
+func (s *SyncService) Resync() {
+	if err := s.manager.Resync(); err != nil {
+		log.Printf("[sync] resync: %v", err)
+	}
+}
+
+// startNetworkWatch begins automatic discovery retries: when the network
+// interfaces change or no peers are found for a while, discovery is
+// restarted (this is what the manual toggle used to do).  Resyncs are
+// skipped while resyncAllowed() returns false.
+func (s *SyncService) startNetworkWatch() {
+	ctx, cancel := context.WithCancel(context.Background())
+	s.watchCancel = cancel
+	w := sync.NewNetworkWatcher()
+	go w.Start(ctx, func() int { return s.manager.PeerCount() }, func() {
+		if s.resyncAllowed != nil && !s.resyncAllowed() {
+			return
+		}
+		if err := s.manager.Resync(); err != nil {
+			log.Printf("[sync] resync: %v", err)
+			return
+		}
+		if s.onResync != nil {
+			s.onResync()
+		}
+	})
+}
+
+// Start begins mDNS discovery, TCP listening, and automatic network-watch
+// retries (resync when interfaces change or no peers are found for a while).
 func (s *SyncService) Start() error {
 	s.manager.SetOnReceive(func(payload []byte) {
 		var p wirePayload
@@ -98,11 +145,19 @@ func (s *SyncService) Start() error {
 		}
 	})
 
-	return s.manager.Start()
+	if err := s.manager.Start(); err != nil {
+		return err
+	}
+	s.startNetworkWatch()
+	return nil
 }
 
-// Stop shuts down discovery and listening.
+// Stop shuts down discovery, the network watcher, and listening.
 func (s *SyncService) Stop() {
+	if s.watchCancel != nil {
+		s.watchCancel()
+		s.watchCancel = nil
+	}
 	s.manager.Stop()
 }
 

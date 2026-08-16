@@ -63,15 +63,16 @@ func (m *Manager) Start() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	added := make(chan Peer, 10)
 
-	if err := Announce(ctx, transport.Port, "", m.deviceID); err != nil {
-		cancel()
-		return err
-	}
-
+	// Start the TCP listener first and wait until it's actually bound before
+	// announcing/browsing.  A peer that resolves during the startup window
+	// would otherwise hit a closed port (connection refused) — one source of
+	// the "first launch finds nothing" flakiness.
+	listenReady := make(chan struct{})
+	markReady := sync.OnceFunc(func() { close(listenReady) })
 	go func() {
 		// Sync owns the TCP listener but routes non-clipboard messages
 		// (file chunks) to the app layer via OnMessage.
-		if err := transport.Listen(ctx, transport.Port, func(msgType byte, payload []byte) {
+		if err := transport.ListenWithReady(ctx, transport.Port, func(msgType byte, payload []byte) {
 			if msgType == transport.MsgClipboard {
 				select {
 				case m.incoming <- payload:
@@ -83,12 +84,19 @@ func (m *Manager) Start() error {
 			if m.OnMessage != nil {
 				m.OnMessage(msgType, payload)
 			}
-		}); err != nil {
+		}, func(string) { markReady() }); err != nil {
 			if ctx.Err() == nil {
 				log.Printf("[sync] listen error: %v", err)
 			}
+			markReady() // don't deadlock Start if the bind fails
 		}
 	}()
+	<-listenReady
+
+	if err := Announce(ctx, transport.Port, "", m.deviceID); err != nil {
+		cancel()
+		return err
+	}
 
 	go func() {
 		if err := Browse(ctx, added, m.deviceID); err != nil {
@@ -139,6 +147,15 @@ func (m *Manager) Restart(passphrase string) error {
 	m.decryptFails = 0
 	m.mu.Unlock()
 
+	return m.Start()
+}
+
+// Resync restarts discovery without changing the encryption key or dropping
+// known peers.  Re-creating the resolver is what re-snapshots the multicast
+// interfaces — the reliable "toggle off/on" effect — so the network watcher
+// uses this when the interfaces change or no peers are found for a while.
+func (m *Manager) Resync() error {
+	m.Stop()
 	return m.Start()
 }
 

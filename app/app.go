@@ -180,6 +180,16 @@ func (m *MercuryApp) startSync(passphrase string) {
 		return
 	}
 
+	// Automatic resync on network change / no-peers.  Refresh the UI after a
+	// resync, but never restart the shared listener mid-transfer (that would
+	// drop the in-flight file stream) — the watcher retries on its next poll.
+	m.syncSvc.SetOnResync(func() {
+		m.notifyChange()
+	})
+	m.syncSvc.SetResyncAllowed(func() bool {
+		return m.transSvc == nil || len(m.transSvc.AllProgress()) == 0
+	})
+
 	m.syncClipboardWatch()
 }
 
