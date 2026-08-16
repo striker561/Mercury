@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"sort"
 	"sync"
 	"time"
 )
@@ -83,7 +84,10 @@ func (pm *PeerMap) ResetFailures(id string) {
 	}
 }
 
-// GetPeers returns a snapshot of all currently known peers.
+// GetPeers returns a snapshot of all currently known peers, sorted
+// alphabetically by ID (which is the announced hostname).  Sorting here keeps
+// the peer list stable across the UI's frequent re-fetches — Go map iteration
+// order is randomised, and an unstable order made the list jump around.
 func (pm *PeerMap) GetPeers() []Peer {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
@@ -92,6 +96,9 @@ func (pm *PeerMap) GetPeers() []Peer {
 	for _, p := range pm.peers {
 		result = append(result, *p) // copy
 	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].ID < result[j].ID
+	})
 	return result
 }
 

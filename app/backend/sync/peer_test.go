@@ -137,3 +137,25 @@ func TestPeerMapGetPeersSnapshot(t *testing.T) {
 		t.Fatal("GetPeers should return a copy, not a reference")
 	}
 }
+
+func TestPeerMapGetPeersSorted(t *testing.T) {
+	pm := NewPeerMap()
+	defer pm.Stop()
+
+	// Insert out of alphabetical order on purpose — the map's iteration order
+	// is randomised, so GetPeers must sort to keep the UI list stable.
+	pm.AddOrUpdate("zeta", "192.168.1.3:47821")
+	pm.AddOrUpdate("alpha", "192.168.1.1:47821")
+	pm.AddOrUpdate("mike", "192.168.1.2:47821")
+
+	peers := pm.GetPeers()
+	if len(peers) != 3 {
+		t.Fatalf("expected 3 peers, got %d", len(peers))
+	}
+	want := []string{"alpha", "mike", "zeta"}
+	for i, id := range want {
+		if peers[i].ID != id {
+			t.Fatalf("peers[%d].ID = %q, want %q (order must be stable)", i, peers[i].ID, id)
+		}
+	}
+}
