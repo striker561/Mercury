@@ -37,16 +37,18 @@ If a peer uses a different passphrase, the GCM authentication tag fails and Merc
 
 Mercury announces itself on the LAN using **mDNS** (Multicast DNS) under the service type `_mercury._tcp`.
 
-| Leaks                        | Does not leak                                |
-| ---------------------------- | -------------------------------------------- |
-| Your hostname                | Your passphrase or key material              |
-| Your IP address              | The contents of your clipboard               |
-| That you are running Mercury | File names or transfer metadata              |
-| TCP port 47821               | Anything beyond "a Mercury node exists here" |
+| Leaks                                          | Does not leak                                |
+| ---------------------------------------------- | -------------------------------------------- |
+| Your hostname                                  | Your passphrase or key material              |
+| A persistent machine ID (mDNS TXT `id=…`)      | The contents of your clipboard               |
+| Your IP address                                | File names or transfer metadata              |
+| That you are running Mercury on TCP port 47821 | Anything beyond "a Mercury node exists here" |
 
 mDNS is a local-only protocol. Announcements do not leave your subnet unless you have configured mDNS reflection (and if you have, you probably know what you are doing).
 
-**The threat:** A neighbour on the same Wi-Fi can see that someone is running Mercury. They cannot see your data, your key, or what you are copying.
+The machine ID is a random value generated once per install and stored in the settings database, so a dual-boot machine — same IP, different hostname per OS — is recognised as one peer. It is opaque: it does not encode or reveal your passphrase or clipboard content.
+
+**The threat:** A neighbour on the same Wi-Fi can see that someone is running Mercury and can observe a device's opaque machine ID. They cannot see your data, your key, or what you are copying.
 
 ## The 25 MB Cap
 
@@ -65,11 +67,11 @@ Clipboard payloads larger than **25 MB** are ignored. Use **file transfer** for 
 
 ### Who this does NOT protect against
 
-| Scenario                              | Why                                                                                                 |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| **Device compromise**                 | If someone has access to your machine, they have the key in memory.                                 |
-| **Advanced persistent threat on LAN** | A determined attacker with ARP spoofing or MITM tools could disrupt service (but not decrypt data). |
-| **Physical access**                   | The passphrase is saved in plaintext in the SQLite settings database. The derived AES key is in memory only and lost on shutdown.                                 |
-| **Malware on a peer device**          | Your trusted peer can exfiltrate decrypted clipboard content. Trust your peers.                     |
+| Scenario                              | Why                                                                                                                               |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **Device compromise**                 | If someone has access to your machine, they have the key in memory.                                                               |
+| **Advanced persistent threat on LAN** | A determined attacker with ARP spoofing or MITM tools could disrupt service (but not decrypt data).                               |
+| **Physical access**                   | The passphrase is saved in plaintext in the SQLite settings database. The derived AES key is in memory only and lost on shutdown. |
+| **Malware on a peer device**          | Your trusted peer can exfiltrate decrypted clipboard content. Trust your peers.                                                   |
 
 **Bottom line:** Mercury protects your clipboard content from being read by anyone who does not have the passphrase. If someone has access to one of your devices or can physically intercept your network at the switch level, all bets are off. But that is true of almost everything.

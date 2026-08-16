@@ -41,10 +41,5 @@ _Even gods have a to-do list. Ours is shorter than most._
 
 - [x] v0.2.0 — streaming file transfer, GitHub auto-update, release pipeline
 - [ ] Oversized clipboard toast (25MB limit, currently log-only)
-- [ ] Native folder picker (replace zenity/osascript)
+- [ ] Snooping detection — notice unknown connections / probes on port 47821 (OS notification + in-app banner, opt-out setting)
 - [ ] Signed release binaries (.deb/.app with notarization)
-
-## Maybe Someday
-
-- [ ] Passphrase easter egg: `> /dev/null`
-- [ ] Mercury emoji animation on successful sync

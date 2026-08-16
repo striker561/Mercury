@@ -16,8 +16,8 @@ sequenceDiagram
     Note over A,B: Boot
     A->>A: Listen on TCP :47821
     B->>B: Listen on TCP :47821
-    A->>A: Announce via mDNS _mercury._tcp
-    B->>B: Announce via mDNS _mercury._tcp
+    A->>A: Announce via mDNS _mercury._tcp (machine ID in TXT)
+    B->>B: Announce via mDNS _mercury._tcp (machine ID in TXT)
     A->>B: mDNS discovery
     B->>A: mDNS discovery
     Note over A,B: Both peers now know each other
@@ -42,18 +42,18 @@ sequenceDiagram
 
 ### `app/`: Application layer
 
-| Package                 | Role                                                             |
-| ----------------------- | ---------------------------------------------------------------- |
-| `app/`                  | `MercuryApp`: main struct exposed to frontend via Wails bindings |
-| `app/backend/clipboard` | Polls the OS clipboard for text / image / file URL changes       |
-| `app/backend/crypto`    | AES-256-GCM encrypt/decrypt + PBKDF2 key derivation              |
-| `app/backend/fileinfo`  | Detects whether copied text is a file path                       |
-| `app/backend/storage`   | SQLite-backed settings persistence                               |
-| `app/backend/sync`      | mDNS discovery + peer management + TCP event loop                |
-| `app/backend/transfer`  | File transfer orchestration (send, receive, progress)            |
-| `app/backend/transport` | Low-level TCP wire protocol (framing, dial, listen)              |
-| `app/services/`         | Business logic bridging frontend IPC to backend engines          |
-| `app/system/`           | System tray menu construction                                    |
+| Package                 | Role                                                                       |
+| ----------------------- | -------------------------------------------------------------------------- |
+| `app/`                  | `MercuryApp`: main struct exposed to frontend via Wails bindings           |
+| `app/backend/clipboard` | Polls the OS clipboard for text / image / file paths (Finder, Explorer)    |
+| `app/backend/crypto`    | AES-256-GCM encrypt/decrypt + PBKDF2 key derivation                        |
+| `app/backend/fileinfo`  | Detects whether copied text is a file path                                 |
+| `app/backend/storage`   | SQLite-backed settings persistence                                         |
+| `app/backend/sync`      | mDNS discovery + peer management + TCP event loop + network-change watcher |
+| `app/backend/transfer`  | File transfer orchestration (send, receive, progress)                      |
+| `app/backend/transport` | Low-level TCP wire protocol (framing, dial, listen)                        |
+| `app/services/`         | Business logic bridging frontend IPC to backend engines                    |
+| `app/system/`           | System tray menu construction                                              |
 
 ### `frontend/`: Web UI
 
@@ -132,20 +132,20 @@ If B declines, A gets a cancellation notice. No hard feelings. Files are not par
 `Discovery → Send → Fail → Eviction → Re-discovery`
 ```
 
-| Phase            | What happens                                                                                                                                                              |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Discovery**    | mDNS announces `_mercury._tcp` on the LAN. Other Mercury instances respond with their IP and port.                                                                        |
-| **Send**         | Every clipboard broadcast or file chunk send is a TCP connection to each peer. A successful send resets that peer's failure counter.                                        |
-| **Eviction**     | A peer with 3 consecutive send failures is evicted. Wrong passphrase (GCM auth failure) logs a warning on the sender side, but the peer is not evicted — they just cannot decrypt. |
-| **Re-discovery** | Mercury continuously listens for mDNS announcements. A peer that comes back online is re-discovered within seconds. No manual reconnection needed.                        |
+| Phase            | What happens                                                                                                                                                                                                                                                                                                                                       |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Discovery**    | mDNS announces `_mercury._tcp` (with a stable machine ID in its TXT record) on the LAN. Other instances respond with their IP and port. Peers are keyed by machine ID, so a dual-boot machine (same IP, different hostname per OS) stays a single entry. If no peers are found or the network interfaces change, discovery restarts automatically. |
+| **Send**         | Every clipboard broadcast or file chunk send is a TCP connection to each peer. A successful send resets that peer's failure counter.                                                                                                                                                                                                               |
+| **Eviction**     | A peer with 3 consecutive send failures is evicted. Wrong passphrase (GCM auth failure) logs a warning on the sender side, but the peer is not evicted — they just cannot decrypt.                                                                                                                                                                 |
+| **Re-discovery** | Mercury continuously listens for mDNS announcements. A peer that comes back online is re-discovered within seconds. No manual reconnection needed.                                                                                                                                                                                                 |
 
 ## Performance Constraints
 
-| Metric                     | Limit                           | Why                                                        |
-| -------------------------- | ------------------------------- | ---------------------------------------------------------- |
-| Clipboard payload          | 25 MB max                       | Beyond this is abuse, not clipboard sync                   |
-| File chunk size            | 256 KiB                         | Balances encryption overhead vs throughput                 |
-| Peer eviction              | 3 consecutive send failures     | A send failure resets on success; 3 strikes and you are out |
-| mDNS interval              | ~2 seconds                      | Standard mDNS timing                                       |
-| Clipboard poll rate        | ~150 ms                         | Fast enough to feel instant, slow enough to not peg a core |
-| Max simultaneous transfers | 1 per peer                      | Keeps the wire protocol simple                             |
+| Metric                     | Limit                       | Why                                                         |
+| -------------------------- | --------------------------- | ----------------------------------------------------------- |
+| Clipboard payload          | 25 MB max                   | Beyond this is abuse, not clipboard sync                    |
+| File chunk size            | 256 KiB                     | Balances encryption overhead vs throughput                  |
+| Peer eviction              | 3 consecutive send failures | A send failure resets on success; 3 strikes and you are out |
+| mDNS interval              | ~2 seconds                  | Standard mDNS timing                                        |
+| Clipboard poll rate        | ~150 ms                     | Fast enough to feel instant, slow enough to not peg a core  |
+| Max simultaneous transfers | 1 per peer                  | Keeps the wire protocol simple                              |

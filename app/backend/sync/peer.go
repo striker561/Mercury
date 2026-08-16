@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"sort"
 	"sync"
 	"time"
 )
@@ -12,8 +13,15 @@ const (
 )
 
 // Peer represents a Mercury instance discovered on the LAN.
+//
+// ID is the stable machine ID (announced via mDNS TXT) — this is what the
+// peer map is keyed by, so a dual-boot machine (same IP, different hostname
+// per OS) stays a single entry.  Hostname is the announced display name and
+// may change; it's for the UI only.  Legacy peers that don't announce a
+// machine ID use their hostname as ID.
 type Peer struct {
 	ID        string    `json:"id"`
+	Hostname  string    `json:"hostname"`
 	Addr      string    `json:"addr"`
 	LastSeen  time.Time `json:"lastSeen"`
 	failCount int       // consecutive TCP failures (internal, not exported)
@@ -34,25 +42,36 @@ func NewPeerMap() *PeerMap {
 	}
 }
 
-// AddOrUpdate records or refreshes a peer.  If a peer with the same ID
-// already exists its address and LastSeen are updated and its failure
-// count is reset (a new mDNS announcement means the peer is alive).
+// AddOrUpdate records or refreshes a peer keyed by id.  If a peer with the
+// same ID already exists its address and LastSeen are updated and its failure
+// count is reset (a new mDNS announcement means the peer is alive).  Hostname
+// defaults to id for legacy callers.
 func (pm *PeerMap) AddOrUpdate(id, addr string) {
+	pm.addOrUpdate(&Peer{ID: id, Addr: addr, Hostname: id})
+}
+
+// AddOrUpdatePeer records or refreshes a peer with full metadata, used by the
+// mDNS discovery path where the stable machine ID and the display hostname
+// can differ (dual-boot).  Updating an existing peer refreshes its hostname,
+// so the entry shows whichever OS last announced it.
+func (pm *PeerMap) AddOrUpdatePeer(p Peer) {
+	pm.addOrUpdate(&p)
+}
+
+func (pm *PeerMap) addOrUpdate(p *Peer) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
-	if existing, ok := pm.peers[id]; ok {
-		existing.Addr = addr
+	if existing, ok := pm.peers[p.ID]; ok {
+		existing.Addr = p.Addr
+		existing.Hostname = p.Hostname
 		existing.LastSeen = time.Now()
 		existing.failCount = 0 // fresh announcement = alive
 		return
 	}
 
-	pm.peers[id] = &Peer{
-		ID:       id,
-		Addr:     addr,
-		LastSeen: time.Now(),
-	}
+	p.LastSeen = time.Now()
+	pm.peers[p.ID] = p
 }
 
 // RecordFailure increments a peer's failure counter.  Returns true when
@@ -83,7 +102,10 @@ func (pm *PeerMap) ResetFailures(id string) {
 	}
 }
 
-// GetPeers returns a snapshot of all currently known peers.
+// GetPeers returns a snapshot of all currently known peers, sorted
+// alphabetically by ID (which is the announced hostname).  Sorting here keeps
+// the peer list stable across the UI's frequent re-fetches — Go map iteration
+// order is randomised, and an unstable order made the list jump around.
 func (pm *PeerMap) GetPeers() []Peer {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
@@ -92,6 +114,9 @@ func (pm *PeerMap) GetPeers() []Peer {
 	for _, p := range pm.peers {
 		result = append(result, *p) // copy
 	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Hostname < result[j].Hostname
+	})
 	return result
 }
 

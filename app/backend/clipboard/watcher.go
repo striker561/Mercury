@@ -31,6 +31,10 @@ type Change struct {
 type Reader interface {
 	ReadText() string
 	ReadImage() []byte
+	// ReadFiles returns absolute file paths currently on the clipboard
+	// (macOS Finder and Windows Explorer copy files via file-list formats,
+	// not plain text).  Returns nil when there are none.
+	ReadFiles() []string
 }
 
 // liveReader uses the real golang.design/x/clipboard package.
@@ -45,6 +49,10 @@ func (liveReader) ReadText() string {
 
 func (liveReader) ReadImage() []byte {
 	return clipboard.Read(clipboard.FmtImage)
+}
+
+func (liveReader) ReadFiles() []string {
+	return readFileURLs()
 }
 
 // Watcher monitors the OS clipboard and emits changes.
@@ -112,7 +120,11 @@ func (w *Watcher) Start(ctx context.Context) {
 	w.mu.Lock()
 	w.prevText = w.reader.ReadText()
 	w.prevImage = w.reader.ReadImage()
-	w.prevFileURL = ""
+	if paths := w.reader.ReadFiles(); len(paths) > 0 {
+		w.prevFileURL = paths[0]
+	} else {
+		w.prevFileURL = ""
+	}
 	w.lastEvent = time.Now()
 	w.mu.Unlock()
 
@@ -147,15 +159,18 @@ func (w *Watcher) poll() {
 		return
 	}
 
-	// On macOS, first check if file paths are on the pasteboard (Finder
-	// copies files using NSFilenamesPboardType / NSPasteboardTypeFileURL
-	// which the text-based library doesn't reliably expose).
-	if paths := readFileURLs(); len(paths) > 0 {
+	// First check if file paths are on the clipboard.  macOS Finder copies
+	// files via NSFilenamesPboardType / NSPasteboardTypeFileURL and Windows
+	// Explorer uses CF_HDROP — neither is exposed as plain text by the
+	// text/image reader, so we read them separately and surface the first
+	// file as a ChangeText.
+	if paths := w.reader.ReadFiles(); len(paths) > 0 {
 		path := paths[0] // take first file for single-file offers
 		if path != w.prevFileURL {
 			w.prevFileURL = path
 			w.prevText = path // keep text in sync so text reader doesn't re-trigger
 			w.lastEvent = now
+			log.Printf("[clipboard] file path on clipboard: %s", path)
 			if w.onChange != nil {
 				go w.onChange(Change{Type: ChangeText, Text: path})
 			}

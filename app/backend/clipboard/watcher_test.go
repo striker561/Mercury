@@ -9,10 +9,52 @@ import (
 type mockReader struct {
 	text  string
 	image []byte
+	files []string
 }
 
 func (m *mockReader) ReadText() string  { return m.text }
 func (m *mockReader) ReadImage() []byte { return m.image }
+func (m *mockReader) ReadFiles() []string {
+	return m.files
+}
+
+// changeRecorder collects clipboard-change callbacks on a buffered channel so
+// tests can wait deterministically.  The watcher dispatches callbacks
+// asynchronously (`go onChange(...)`), so reading a shared variable right after
+// poll() races and flakes under `go test ./...`.
+type changeRecorder struct {
+	ch chan Change
+}
+
+func newChangeRecorder() *changeRecorder {
+	return &changeRecorder{ch: make(chan Change, 8)}
+}
+
+func (r *changeRecorder) on() func(Change) {
+	return func(c Change) { r.ch <- c }
+}
+
+// next waits for the next change, failing the test if none arrives in time.
+func (r *changeRecorder) next(t *testing.T) Change {
+	t.Helper()
+	select {
+	case c := <-r.ch:
+		return c
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for clipboard change")
+		return Change{}
+	}
+}
+
+// empty reports whether no change is pending, without blocking.
+func (r *changeRecorder) empty() bool {
+	select {
+	case <-r.ch:
+		return false
+	default:
+		return true
+	}
+}
 
 func TestBytesEqual(t *testing.T) {
 	cases := []struct {
@@ -71,18 +113,19 @@ func TestPollDetectsTextChange(t *testing.T) {
 	w := newWatcherWithReader(mock)
 	w.debounceDur = 0 // disable debounce for deterministic testing
 
-	var got Change
-	w.OnChange(func(c Change) { got = c })
+	rec := newChangeRecorder()
+	w.OnChange(rec.on())
 
-	// First poll initializes state
+	// First poll initializes state and fires for the initial value.
 	w.poll()
-	if got.Text != "old" {
+	if got := rec.next(t); got.Text != "old" {
 		t.Fatalf("expected init 'old', got %q", got.Text)
 	}
 
-	// Change text and poll again
+	// Change text and poll again.
 	mock.text = "new value"
 	w.poll()
+	got := rec.next(t)
 	if got.Type != ChangeText {
 		t.Errorf("expected ChangeText, got %v", got.Type)
 	}
@@ -90,10 +133,9 @@ func TestPollDetectsTextChange(t *testing.T) {
 		t.Errorf("expected 'new value', got %q", got.Text)
 	}
 
-	// Same content — no callback
-	got = Change{}
+	// Same content — no callback.
 	w.poll()
-	if got.Text != "" {
+	if !rec.empty() {
 		t.Fatal("expected no callback for same content")
 	}
 }
@@ -103,14 +145,16 @@ func TestPollDetectsImageChange(t *testing.T) {
 	w := newWatcherWithReader(mock)
 	w.debounceDur = 0
 
-	var got Change
-	w.OnChange(func(c Change) { got = c })
+	rec := newChangeRecorder()
+	w.OnChange(rec.on())
 
-	w.poll() // init
+	w.poll() // init — fires for {1,2,3}
+	rec.next(t)
+
 	mock.image = []byte{4, 5, 6}
 	w.poll()
 
-	if got.Type != ChangeImage {
+	if got := rec.next(t); got.Type != ChangeImage {
 		t.Errorf("expected ChangeImage, got %v", got.Type)
 	}
 }
@@ -120,17 +164,16 @@ func TestDebounce(t *testing.T) {
 	w := newWatcherWithReader(mock)
 	w.debounceDur = time.Hour // effectively infinite debounce
 
-	count := 0
-	w.OnChange(func(c Change) { count++ })
+	rec := newChangeRecorder()
+	w.OnChange(rec.on())
 
-	w.poll() // init fires despite debounce (lastEvent = now, but debounceDur is huge)
-	// Actually, debounce will block this... let me reset after init
-	count = 0
+	w.poll() // init fires despite the debounce (lastEvent is the zero time)
+	rec.next(t)
 
 	mock.text = "v2"
-	// lastEvent was set by init, so debounce will block
+	// lastEvent was set by init, so the huge debounce blocks this poll.
 	w.poll()
-	if count != 0 {
+	if !rec.empty() {
 		t.Fatal("expected 0 callbacks with long debounce")
 	}
 }
@@ -140,26 +183,26 @@ func TestDebounceRespectsInterval(t *testing.T) {
 	w := newWatcherWithReader(mock)
 	w.debounceDur = 50 * time.Millisecond
 
-	count := 0
-	w.OnChange(func(c Change) { count++ })
-	w.poll() // init
+	rec := newChangeRecorder()
+	w.OnChange(rec.on())
+	w.poll() // init fires
+	rec.next(t)
+
 	mock.text = "b"
 
-	// Too fast — debounce blocks
+	// Too fast — debounce blocks.
 	w.poll()
-	if count != 1 {
-		t.Fatalf("expected 1 (init), got %d", count)
+	if !rec.empty() {
+		t.Fatal("expected no callback while inside the debounce window")
 	}
 
-	// Wait past debounce
+	// Wait past debounce.
 	w.mu.Lock()
 	w.lastEvent = time.Now().Add(-100 * time.Millisecond)
 	w.mu.Unlock()
 
 	w.poll()
-	if count != 2 {
-		t.Fatalf("expected 2 after waiting, got %d", count)
-	}
+	rec.next(t) // fires for "b"
 }
 
 func TestPausedWatcherSkipsPoll(t *testing.T) {
@@ -167,24 +210,22 @@ func TestPausedWatcherSkipsPoll(t *testing.T) {
 	w := newWatcherWithReader(mock)
 	w.debounceDur = 0
 
-	count := 0
-	w.OnChange(func(c Change) { count++ })
+	rec := newChangeRecorder()
+	w.OnChange(rec.on())
 
-	w.poll() // init
-	count = 0
+	w.poll() // init fires
+	rec.next(t)
 
 	w.Pause()
 	mock.text = "changed"
 	w.poll()
-	if count != 0 {
+	if !rec.empty() {
 		t.Fatal("should not fire while paused")
 	}
 
 	w.Resume()
 	w.poll()
-	if count != 1 {
-		t.Fatalf("expected 1 after resume, got %d", count)
-	}
+	rec.next(t) // fires for "changed"
 }
 
 func TestWatcherStopsOnCancel(t *testing.T) {
@@ -205,5 +246,85 @@ func TestWatcherStopsOnCancel(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("watcher did not stop on cancel")
+	}
+}
+
+func TestPollDetectsFileChange(t *testing.T) {
+	mock := &mockReader{}
+	w := newWatcherWithReader(mock)
+	w.debounceDur = 0 // disable debounce for deterministic testing
+
+	rec := newChangeRecorder()
+	w.OnChange(rec.on())
+
+	w.poll() // init — no files on clipboard yet
+
+	mock.files = []string{`C:\Users\me\Desktop\photo.png`}
+	w.poll()
+	got := rec.next(t)
+	if got.Type != ChangeText {
+		t.Fatalf("expected ChangeText, got %v", got.Type)
+	}
+	if got.Text != `C:\Users\me\Desktop\photo.png` {
+		t.Fatalf("expected file path, got %q", got.Text)
+	}
+}
+
+func TestPollFileTakesFirstPath(t *testing.T) {
+	mock := &mockReader{}
+	w := newWatcherWithReader(mock)
+	w.debounceDur = 0
+
+	rec := newChangeRecorder()
+	w.OnChange(rec.on())
+
+	w.poll() // init
+	mock.files = []string{`/tmp/a.txt`, `/tmp/b.txt`}
+	w.poll()
+
+	if got := rec.next(t); got.Text != `/tmp/a.txt` {
+		t.Fatalf("expected first file path, got %q", got.Text)
+	}
+}
+
+func TestPollSameFileDoesNotRefire(t *testing.T) {
+	mock := &mockReader{}
+	w := newWatcherWithReader(mock)
+	w.debounceDur = 0
+
+	rec := newChangeRecorder()
+	w.OnChange(rec.on())
+
+	mock.files = []string{`/tmp/a.txt`}
+	w.poll() // fires once
+	rec.next(t)
+	w.poll() // same path still on clipboard — must not refire
+
+	if !rec.empty() {
+		t.Fatal("expected no callback for the same file path")
+	}
+}
+
+func TestPollFileToTextTransition(t *testing.T) {
+	mock := &mockReader{}
+	w := newWatcherWithReader(mock)
+	w.debounceDur = 0
+
+	rec := newChangeRecorder()
+	w.OnChange(rec.on())
+
+	w.poll() // init
+	mock.files = []string{`/tmp/a.txt`}
+	w.poll()
+	if got := rec.next(t); got.Type != ChangeText || got.Text != `/tmp/a.txt` {
+		t.Fatalf("expected file path, got %+v", got)
+	}
+
+	// File copy replaced by plain text.
+	mock.files = nil
+	mock.text = "hello"
+	w.poll()
+	if got := rec.next(t); got.Type != ChangeText || got.Text != "hello" {
+		t.Fatalf("expected text transition, got %+v", got)
 	}
 }

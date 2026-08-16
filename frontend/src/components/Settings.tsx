@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Eye, EyeSlash } from "@phosphor-icons/react";
+import { Check, Eye, EyeSlash } from "@phosphor-icons/react";
 import { MercuryApp } from "../../bindings/mercury/app";
 import { copy } from "../copy";
 import type { AppSettings } from "../types/mercury";
@@ -68,8 +68,8 @@ export default function Settings({
     <>
       <section className="settings-section">
         <div className="section-label">{copy.settings.covenant}</div>
-        <p className="section-hint">{copy.settings.covenantHint}</p>
         <div className="group">
+          <p className="group-hint">{copy.settings.covenantHint}</p>
           <div className="group-row group-row-stack">
             <span className="group-row-label">{copy.settings.passphrase}</span>
             <div className="passphrase-wrap">
@@ -115,6 +115,7 @@ export default function Settings({
               className={`save-feedback${saved ? " visible" : ""}`}
               aria-live="polite"
             >
+              {saved && <Check size={12} weight="bold" aria-hidden />}
               {copy.settings.saved}
             </span>
           </div>
@@ -123,8 +124,8 @@ export default function Settings({
 
       <section className="settings-section">
         <div className="section-label">{copy.settings.offerings}</div>
-        <p className="section-hint">{copy.settings.offeringsHint}</p>
         <div className="group">
+          <p className="group-hint">{copy.settings.offeringsHint}</p>
           <div className="group-row group-row-stack">
             <span className="group-row-label">{copy.settings.saveTo}</span>
             <div className="group-row-path">
@@ -152,7 +153,7 @@ export default function Settings({
             />
           </div>
           <div className="group-note">{copy.settings.acceptFilesHint}</div>
-          <div className="group-row" style={{ opacity: accept ? 1 : 0.45 }}>
+          <div className="group-row group-row-disabled" data-disabled={!accept}>
             <span className="group-row-label">{copy.settings.autoAccept}</span>
             <button
               type="button"
@@ -164,7 +165,10 @@ export default function Settings({
               disabled={!accept}
             />
           </div>
-          <div className="group-note" style={{ opacity: accept ? 1 : 0.45 }}>
+          <div
+            className="group-note group-note-disabled"
+            data-disabled={!accept}
+          >
             {copy.settings.autoAcceptHint}
           </div>
         </div>
@@ -172,8 +176,8 @@ export default function Settings({
 
       <section className="settings-section">
         <div className="section-label">{copy.settings.presence}</div>
-        <p className="section-hint">{copy.settings.presenceHint}</p>
         <div className="group">
+          <p className="group-hint">{copy.settings.presenceHint}</p>
           <div className="group-row">
             <span className="group-row-label">
               {copy.settings.startOnLogin}

@@ -16,6 +16,7 @@ type OnReceiveCallback func(payload []byte)
 // Create with NewManager, then Start/Stop.
 type Manager struct {
 	key      []byte
+	deviceID string
 	peerMap  *PeerMap
 	incoming chan []byte
 
@@ -33,10 +34,13 @@ type Manager struct {
 }
 
 // NewManager creates a Manager that derives its encryption key from the
-// given passphrase.  Call Start to begin discovery and listening.
-func NewManager(passphrase string) *Manager {
+// given passphrase.  deviceID is this machine's stable identity, advertised
+// in mDNS TXT records so peers can dedup us across hostname changes.  Call
+// Start to begin discovery and listening.
+func NewManager(passphrase, deviceID string) *Manager {
 	return &Manager{
 		key:      crypto.DeriveKey(passphrase),
+		deviceID: deviceID,
 		peerMap:  NewPeerMap(),
 		incoming: make(chan []byte, 10),
 	}
@@ -59,15 +63,16 @@ func (m *Manager) Start() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	added := make(chan Peer, 10)
 
-	if err := Announce(ctx, transport.Port, ""); err != nil {
-		cancel()
-		return err
-	}
-
+	// Start the TCP listener first and wait until it's actually bound before
+	// announcing/browsing.  A peer that resolves during the startup window
+	// would otherwise hit a closed port (connection refused) — one source of
+	// the "first launch finds nothing" flakiness.
+	listenReady := make(chan struct{})
+	markReady := sync.OnceFunc(func() { close(listenReady) })
 	go func() {
 		// Sync owns the TCP listener but routes non-clipboard messages
 		// (file chunks) to the app layer via OnMessage.
-		if err := transport.Listen(ctx, transport.Port, func(msgType byte, payload []byte) {
+		if err := transport.ListenWithReady(ctx, transport.Port, func(msgType byte, payload []byte) {
 			if msgType == transport.MsgClipboard {
 				select {
 				case m.incoming <- payload:
@@ -79,15 +84,22 @@ func (m *Manager) Start() error {
 			if m.OnMessage != nil {
 				m.OnMessage(msgType, payload)
 			}
-		}); err != nil {
+		}, func(string) { markReady() }); err != nil {
 			if ctx.Err() == nil {
 				log.Printf("[sync] listen error: %v", err)
 			}
+			markReady() // don't deadlock Start if the bind fails
 		}
 	}()
+	<-listenReady
+
+	if err := Announce(ctx, transport.Port, "", m.deviceID); err != nil {
+		cancel()
+		return err
+	}
 
 	go func() {
-		if err := Browse(ctx, added); err != nil {
+		if err := Browse(ctx, added, m.deviceID); err != nil {
 			if ctx.Err() == nil {
 				log.Printf("[sync] browse error: %v", err)
 			}
@@ -135,6 +147,15 @@ func (m *Manager) Restart(passphrase string) error {
 	m.decryptFails = 0
 	m.mu.Unlock()
 
+	return m.Start()
+}
+
+// Resync restarts discovery without changing the encryption key or dropping
+// known peers.  Re-creating the resolver is what re-snapshots the multicast
+// interfaces — the reliable "toggle off/on" effect — so the network watcher
+// uses this when the interfaces change or no peers are found for a while.
+func (m *Manager) Resync() error {
+	m.Stop()
 	return m.Start()
 }
 
@@ -239,7 +260,7 @@ func (m *Manager) eventLoop(ctx context.Context, added <-chan Peer) {
 				}
 			}
 		case peer := <-added:
-			m.peerMap.AddOrUpdate(peer.ID, peer.Addr)
+			m.peerMap.AddOrUpdatePeer(peer)
 		}
 	}
 }

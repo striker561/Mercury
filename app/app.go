@@ -125,7 +125,7 @@ func (m *MercuryApp) startSync(passphrase string) {
 		m.clipSvc.Stop()
 	}
 
-	m.syncSvc = services.NewSyncService(passphrase)
+	m.syncSvc = services.NewSyncService(passphrase, storage.EnsureDeviceID(m.db))
 
 	// Wire the shared TCP listener: sync handles clipboard, transfer handles
 	// file chunks.  They don't know about each other — OnMessage is the glue.
@@ -179,6 +179,16 @@ func (m *MercuryApp) startSync(passphrase string) {
 		log.Printf("[mercury] sync start error: %v", err)
 		return
 	}
+
+	// Automatic resync on network change / no-peers.  Refresh the UI after a
+	// resync, but never restart the shared listener mid-transfer (that would
+	// drop the in-flight file stream) — the watcher retries on its next poll.
+	m.syncSvc.SetOnResync(func() {
+		m.notifyChange()
+	})
+	m.syncSvc.SetResyncAllowed(func() bool {
+		return m.transSvc == nil || len(m.transSvc.AllProgress()) == 0
+	})
 
 	m.syncClipboardWatch()
 }

@@ -20,6 +20,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -36,10 +37,11 @@ const (
 
 // Offer represents a pending incoming file offer.
 type Offer struct {
-	ID       string `json:"id"`
-	FileName string `json:"file_name"`
-	FileSize int64  `json:"file_size"`
-	PeerAddr string `json:"peer_addr"`
+	ID        string    `json:"id"`
+	FileName  string    `json:"file_name"`
+	FileSize  int64     `json:"file_size"`
+	PeerAddr  string    `json:"peer_addr"`
+	CreatedAt time.Time `json:"created_at"` // arrival order — used to stabilise the UI list
 }
 
 // Status is the current state of a file transfer.
@@ -56,12 +58,13 @@ const (
 
 // Progress contains live transfer state for the frontend.
 type Progress struct {
-	ID       string `json:"id"`
-	FileName string `json:"file_name"`
-	FileSize int64  `json:"file_size"`
-	Received int64  `json:"received"`
-	Speed    int64  `json:"speed"` // bytes/sec, 0 when idle
-	Status   Status `json:"status"`
+	ID        string    `json:"id"`
+	FileName  string    `json:"file_name"`
+	FileSize  int64     `json:"file_size"`
+	Received  int64     `json:"received"`
+	Speed     int64     `json:"speed"` // bytes/sec, 0 when idle
+	Status    Status    `json:"status"`
+	CreatedAt time.Time `json:"created_at"` // arrival order — used to stabilise the UI list
 }
 
 // ─── Manager ─────────────────────────────────────────────────────────
@@ -152,7 +155,7 @@ func (m *Manager) NewOfferID() string {
 // IncomingOffer stores an offer from the network and fires OnOffer.
 func (m *Manager) IncomingOffer(fileName string, fileSize int64, peerAddr string) Offer {
 	id := m.NewOfferID()
-	o := Offer{ID: id, FileName: fileName, FileSize: fileSize, PeerAddr: peerAddr}
+	o := Offer{ID: id, FileName: fileName, FileSize: fileSize, PeerAddr: peerAddr, CreatedAt: time.Now()}
 	m.mu.Lock()
 	m.offers[id] = &o
 	m.mu.Unlock()
@@ -165,7 +168,7 @@ func (m *Manager) IncomingOffer(fileName string, fileSize int64, peerAddr string
 
 // IncomingOfferWithID stores an offer using the sender's offer ID (no new ID generated).
 func (m *Manager) IncomingOfferWithID(offerID, fileName string, fileSize int64, peerAddr string) Offer {
-	o := Offer{ID: offerID, FileName: fileName, FileSize: fileSize, PeerAddr: peerAddr}
+	o := Offer{ID: offerID, FileName: fileName, FileSize: fileSize, PeerAddr: peerAddr, CreatedAt: time.Now()}
 	m.mu.Lock()
 	m.offers[offerID] = &o
 	m.mu.Unlock()
@@ -177,6 +180,10 @@ func (m *Manager) IncomingOfferWithID(offerID, fileName string, fileSize int64, 
 }
 
 // PendingOffers returns all offers that haven't been acted on.
+// PendingOffers returns all offers that haven't been acted on, sorted by
+// arrival time (oldest first) with ID as a deterministic tie-break.  Sorting
+// here is what keeps the frontend list stable — Go map iteration is
+// randomised, and the UI re-fetches on every progress event.
 func (m *Manager) PendingOffers() []Offer {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -184,6 +191,12 @@ func (m *Manager) PendingOffers() []Offer {
 	for _, o := range m.offers {
 		out = append(out, *o)
 	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].ID < out[j].ID
+		}
+		return out[i].CreatedAt.Before(out[j].CreatedAt)
+	})
 	return out
 }
 
@@ -199,7 +212,7 @@ func (m *Manager) AcceptOffer(offerID, saveDir string) (string, error) {
 	m.mu.Unlock()
 
 	tid := m.NewOfferID()
-	p := &Progress{ID: tid, FileName: o.FileName, FileSize: o.FileSize, Status: StatusAccepting}
+	p := &Progress{ID: tid, FileName: o.FileName, FileSize: o.FileSize, Status: StatusAccepting, CreatedAt: time.Now()}
 	m.mu.Lock()
 	m.transfers[tid] = p
 	m.mu.Unlock()
@@ -244,7 +257,7 @@ func (m *Manager) SendFile(peerAddr, filePath string) (string, error) {
 		return "", fmt.Errorf("transfer: %w", err)
 	}
 	tid := m.NewOfferID()
-	p := &Progress{ID: tid, FileName: filepath.Base(filePath), FileSize: fi.Size(), Status: StatusSending}
+	p := &Progress{ID: tid, FileName: filepath.Base(filePath), FileSize: fi.Size(), Status: StatusSending, CreatedAt: time.Now()}
 	m.mu.Lock()
 	m.transfers[tid] = p
 	m.mu.Unlock()
@@ -261,7 +274,7 @@ func (m *Manager) SendFileForOffer(offerID, peerAddr, filePath string) (string, 
 		return "", fmt.Errorf("transfer: %w", err)
 	}
 	tid := m.NewOfferID()
-	p := &Progress{ID: tid, FileName: filepath.Base(filePath), FileSize: fi.Size(), Status: StatusSending}
+	p := &Progress{ID: tid, FileName: filepath.Base(filePath), FileSize: fi.Size(), Status: StatusSending, CreatedAt: time.Now()}
 	m.mu.Lock()
 	m.transfers[tid] = p
 	m.mu.Unlock()
@@ -282,7 +295,9 @@ func (m *Manager) Progress(tid string) *Progress {
 	return &cp
 }
 
-// AllProgress returns progress for active transfers (omits completed).
+// AllProgress returns progress for active transfers (omits completed), sorted
+// by arrival time (oldest first) with ID as a deterministic tie-break.  Same
+// reasoning as PendingOffers: stable order across UI re-fetches.
 func (m *Manager) AllProgress() []Progress {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -293,6 +308,12 @@ func (m *Manager) AllProgress() []Progress {
 		}
 		out = append(out, *p)
 	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].ID < out[j].ID
+		}
+		return out[i].CreatedAt.Before(out[j].CreatedAt)
+	})
 	return out
 }
 

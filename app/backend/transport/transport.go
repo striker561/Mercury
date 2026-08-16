@@ -86,9 +86,19 @@ func WriteFrame(conn net.Conn, msgType byte, payload []byte) error {
 // Listen accepts connections on port and calls handler for each message.
 // Pass port 0 to bind an ephemeral port (useful in tests).
 func Listen(ctx context.Context, port int, handler OnMessage) error {
+	return ListenWithReady(ctx, port, handler, nil)
+}
+
+// ListenWithReady is Listen with an optional onReady callback fired once the
+// listener is bound, with the actual listen address.  Callers use it to avoid
+// announcing/browsing before the socket exists.
+func ListenWithReady(ctx context.Context, port int, handler OnMessage, onReady func(addr string)) error {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
+	}
+	if onReady != nil {
+		onReady(listener.Addr().String())
 	}
 	return Serve(ctx, listener, handler)
 }

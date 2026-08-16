@@ -40,7 +40,7 @@ Clipboard watching starts automatically when at least one peer is online.
 
 ## File transfer
 
-1. Copy a **file path** or file from your file manager.
+1. Copy a **file** in Finder (macOS), **File Explorer** (Windows), or your **Linux file manager** — or copy a file path as text.
 2. Mercury detects the file and sends an **offer** to connected peers.
 3. The recipient sees the offer on **Home** and can **Accept** or **Decline**.
 4. Accepted files save to the folder configured in Settings (default `~/Downloads/Mercury/`).

@@ -1,5 +1,10 @@
 package storage
 
+import (
+	"crypto/rand"
+	"encoding/hex"
+)
+
 // All setting keys and their defaults live here.
 // Adding a new setting? Add a key constant and an entry in defaults.
 // No migration needed — missing keys return the default value automatically.
@@ -12,6 +17,7 @@ const (
 	KeyReceivedFolder = "received_folder"
 	KeyAutostart      = "autostart"
 	KeyAutoAccept     = "auto_accept"
+	KeyDeviceID       = "device_id"
 )
 
 // defaultValues holds the fallback for every known setting.
@@ -23,6 +29,29 @@ var defaultValues = map[string]string{
 	KeyReceivedFolder: "~/Downloads/Mercury/",
 	KeyAutostart:      "false",
 	KeyAutoAccept:     "false",
+	KeyDeviceID:       "",
+}
+
+// EnsureDeviceID returns this installation's stable machine ID, generating
+// and persisting a random one on first use.  It is announced in mDNS TXT
+// records so peers can recognise the same machine even when its hostname
+// changes between OSes (dual-boot).  Returns "" only if the DB is
+// unavailable.
+func EnsureDeviceID(d *DB) string {
+	if d == nil {
+		return ""
+	}
+	id, _ := d.Get(KeyDeviceID)
+	if id != "" {
+		return id
+	}
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return ""
+	}
+	id = hex.EncodeToString(b)
+	_ = d.Set(KeyDeviceID, id)
+	return id
 }
 
 // AllKeys returns every registered setting key.
