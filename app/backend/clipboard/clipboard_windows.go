@@ -3,6 +3,7 @@
 package clipboard
 
 import (
+	"log"
 	"syscall"
 	"unicode/utf16"
 	"unsafe"
@@ -37,6 +38,15 @@ type DROPFILES struct {
 // readFileURLs reads file paths from the Windows clipboard (CF_HDROP format).
 // Returns nil if no file paths are present.
 func readFileURLs() []string {
+	// The clipboard can hold arbitrary or malformed data — never let parsing
+	// quirks crash the watcher goroutine (a Go panic in any goroutine would
+	// terminate the whole process).
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[clipboard] readFileURLs recovered: %v", r)
+		}
+	}()
+
 	r, _, _ := procOpenClipboard.Call(0)
 	if r == 0 {
 		return nil
@@ -57,40 +67,42 @@ func readFileURLs() []string {
 	df := (*DROPFILES)(unsafe.Pointer(ptr))
 
 	// File list starts at offset pFiles from the DROPFILES structure.
-	fileListBase := uintptr(ptr) + uintptr(df.pFiles)
+	// unsafe.Add / unsafe.Slice are checkptr-aware, so this passes `go vet`
+	// and won't trip the -checkptr instrumentation under `go test`.
+	base := unsafe.Add(unsafe.Pointer(ptr), df.pFiles)
 
 	var files []string
 	if df.fWide != 0 {
-		// UTF-16 encoded file names.
-		off := fileListBase
+		// UTF-16 encoded file names (terminated by a double null).
+		off := uintptr(0)
 		for {
 			// Find null terminator.
 			end := off
-			for *(*uint16)(unsafe.Pointer(end)) != 0 {
+			for *(*uint16)(unsafe.Add(base, end)) != 0 {
 				end += 2
 			}
-			nchars := (end - off) / 2
+			nchars := int((end - off) / 2)
 			if nchars == 0 {
 				break // double null — end of list
 			}
 			// Decode the UTF-16 slice.
-			raw := unsafe.Slice((*uint16)(unsafe.Pointer(off)), nchars)
+			raw := unsafe.Slice((*uint16)(unsafe.Add(base, off)), nchars)
 			files = append(files, string(utf16.Decode(raw)))
 			off = end + 2 // skip null terminator
 		}
 	} else {
-		// ANSI file names.
-		off := fileListBase
+		// ANSI file names (terminated by a double null).
+		off := uintptr(0)
 		for {
 			end := off
-			for *(*byte)(unsafe.Pointer(end)) != 0 {
+			for *(*byte)(unsafe.Add(base, end)) != 0 {
 				end++
 			}
-			nbytes := end - off
+			nbytes := int(end - off)
 			if nbytes == 0 {
 				break // double null — end of list
 			}
-			raw := unsafe.Slice((*byte)(unsafe.Pointer(off)), nbytes)
+			raw := unsafe.Slice((*byte)(unsafe.Add(base, off)), nbytes)
 			files = append(files, string(raw))
 			off = end + 1 // skip null terminator
 		}

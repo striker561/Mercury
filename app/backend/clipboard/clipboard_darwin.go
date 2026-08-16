@@ -20,7 +20,7 @@ const char* readFileURLsFromPasteboard() {
         NSPasteboard *pb = [NSPasteboard generalPasteboard];
 
         // Try modern readObjectsForClasses: first (macOS 10.6+)
-        NSArray<NSString *> *accepted = @[NSString.class];
+        NSArray<Class> *accepted = @[NSString.class];
         NSDictionary *options = @{};
         NSArray *paths = [pb readObjectsForClasses:accepted options:options];
 
@@ -51,6 +51,7 @@ const char* readFileURLsFromPasteboard() {
 */
 import "C"
 import (
+	"log"
 	"strings"
 	"unsafe"
 )
@@ -58,6 +59,13 @@ import (
 // readFileURLs returns file paths from the macOS pasteboard.
 // Returns nil if no file paths are present.
 func readFileURLs() []string {
+	// Never let pasteboard quirks crash the watcher goroutine.
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[clipboard] readFileURLs recovered: %v", r)
+		}
+	}()
+
 	cstr := C.readFileURLsFromPasteboard()
 	if cstr == nil {
 		return nil
