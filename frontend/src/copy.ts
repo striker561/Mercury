@@ -29,6 +29,10 @@ export const copy = {
       "GNOME: install AppIndicator for tray presence, or speak to me through this window.",
   },
 
+  activity: {
+    carrying: "Carrying",
+  },
+
   header: {
     paused: "Resting",
     idle: "Alone",

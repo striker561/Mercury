@@ -4,10 +4,12 @@ import { MercuryApp } from "../bindings/mercury/app";
 import { copy } from "./copy";
 import { useDashboard } from "./hooks/useDashboard";
 import { useMercuryEvents } from "./hooks/useMercuryEvents";
+import { useSyncActivity } from "./hooks/useSyncActivity";
 import Settings from "./components/Settings";
 import FileTransfer from "./components/FileTransfer";
 import Welcome from "./components/Welcome";
-import StatusBar from "./components/StatusBar";
+import ConnectionHero from "./components/ConnectionHero";
+import ActivityStrip from "./components/ActivityStrip";
 import PeerList from "./components/PeerList";
 import SegmentedControl from "./components/SegmentedControl";
 import type { Tab } from "./types/mercury";
@@ -17,9 +19,14 @@ function App() {
   const [tab, setTab] = useState<Tab>("home");
   const [focusPassphrase, setFocusPassphrase] = useState(false);
 
-  useMercuryEvents(refresh);
-
   const { peers, paused, transfers } = state;
+  const { active: syncActive, pulse: pulseSync } = useSyncActivity(
+    peers.length,
+    paused,
+  );
+
+  useMercuryEvents(refresh, pulseSync);
+
   const dotClass = paused
     ? "status-dot paused"
     : peers.length > 0
@@ -33,7 +40,7 @@ function App() {
       : copy.header.idle;
 
   const isTransferring = transfers.some(
-    (t) => t.status === "sending" || t.status === "receiving"
+    (t) => t.status === "sending" || t.status === "receiving",
   );
 
   const handleGetStarted = useCallback(() => {
@@ -90,23 +97,26 @@ function App() {
       <main
         className={`content${tab === "settings" ? " content-settings" : ""}`}
       >
-        {tab === "settings" ? (
-          <Settings
-            focusPassphrase={focusPassphrase}
-            onPassphraseSaved={handlePassphraseSaved}
-          />
-        ) : (
-          <>
-            {showWelcome && <Welcome onGetStarted={handleGetStarted} />}
-            <StatusBar state={state} />
-            <FileTransfer
-              offers={state.offers}
-              transfers={state.transfers}
-              onChange={refresh}
+        <div key={tab} className="content-panel">
+          {tab === "settings" ? (
+            <Settings
+              focusPassphrase={focusPassphrase}
+              onPassphraseSaved={handlePassphraseSaved}
             />
-            <PeerList peers={state.peers} />
-          </>
-        )}
+          ) : (
+            <>
+              {showWelcome && <Welcome onGetStarted={handleGetStarted} />}
+              <ConnectionHero state={state} />
+              <ActivityStrip active={syncActive} />
+              <FileTransfer
+                offers={state.offers}
+                transfers={state.transfers}
+                onChange={refresh}
+              />
+              <PeerList peers={state.peers} />
+            </>
+          )}
+        </div>
       </main>
     </>
   );

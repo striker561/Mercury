@@ -62,7 +62,7 @@ export default function FileTransfer({ offers, transfers, onChange }: Props) {
     <div>
       <div className="section-label">{copy.transfers.section}</div>
       {offers.map((offer) => (
-        <div key={offer.id} className="transfer-card">
+        <div key={offer.id} className="transfer-card transfer-card-enter">
           <div className="transfer-header">
             {fileIcon(offer.file_name)}
             <div className="transfer-info">
@@ -97,7 +97,10 @@ export default function FileTransfer({ offers, transfers, onChange }: Props) {
         const failed = t.status === "failed" || t.status === "cancelled";
 
         return (
-          <div key={t.id} className="transfer-card">
+          <div
+            key={t.id}
+            className={`transfer-card transfer-card-enter${busy ? " transfer-card-active" : ""}`}
+          >
             <div className="transfer-header">
               {fileIcon(t.file_name)}
               <div className="transfer-info">
@@ -112,7 +115,7 @@ export default function FileTransfer({ offers, transfers, onChange }: Props) {
               <div className="progress-track">
                 <div
                   className={`progress-fill${failed ? " failed" : ""}`}
-                  style={{ width: `${pct}%` }}
+                  style={{ transform: `scaleX(${pct / 100})` }}
                 />
               </div>
             )}

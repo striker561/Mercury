@@ -17,9 +17,9 @@ export default function Welcome({ onGetStarted }: Props) {
       <h2 className="welcome-title">{copy.welcome.title}</h2>
       <p className="welcome-lead">{copy.welcome.lead}</p>
       <div className="welcome-steps">
-        {copy.welcome.steps.map((step, i) => (
+        {copy.welcome.steps.map((step) => (
           <div key={step} className="welcome-step">
-            <span className="welcome-step-num">{i + 1}</span>
+            <span className="welcome-step-bar" aria-hidden />
             <span>{step}</span>
           </div>
         ))}
