@@ -10,7 +10,16 @@ I am Mercury. Cross-platform LAN clipboard and file sharing. I live in your syst
 
 No cloud. No accounts. No history. **I just work.** Like a messenger god should. For your clipboard. With fewer lightning bolts and zero venture capital.
 
-**Current version:** `0.2.0` · [All releases](https://github.com/striker561/Mercury/releases) · [Documentation](https://striker561.github.io/Mercury/docs/intro)
+**Current version:** `0.2.5` · [All releases](https://github.com/striker561/Mercury/releases) · [Documentation](https://striker561.github.io/Mercury/docs/intro)
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img width="100%" alt="Mercury Home" src="https://github.com/user-attachments/assets/d3ffe657-6cf0-4cec-b2c3-21c34b073857" /></td>
+    <td width="50%"><img width="100%" alt="Mercury Settings" src="https://github.com/user-attachments/assets/d2f16b08-30a0-4c96-85a9-5aa3ee3c78bd" /></td>
+  </tr>
+</table>
 
 ## What I Do
 
