@@ -16,6 +16,7 @@ type OnReceiveCallback func(payload []byte)
 // Create with NewManager, then Start/Stop.
 type Manager struct {
 	key      []byte
+	deviceID string
 	peerMap  *PeerMap
 	incoming chan []byte
 
@@ -33,10 +34,13 @@ type Manager struct {
 }
 
 // NewManager creates a Manager that derives its encryption key from the
-// given passphrase.  Call Start to begin discovery and listening.
-func NewManager(passphrase string) *Manager {
+// given passphrase.  deviceID is this machine's stable identity, advertised
+// in mDNS TXT records so peers can dedup us across hostname changes.  Call
+// Start to begin discovery and listening.
+func NewManager(passphrase, deviceID string) *Manager {
 	return &Manager{
 		key:      crypto.DeriveKey(passphrase),
+		deviceID: deviceID,
 		peerMap:  NewPeerMap(),
 		incoming: make(chan []byte, 10),
 	}
@@ -59,7 +63,7 @@ func (m *Manager) Start() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	added := make(chan Peer, 10)
 
-	if err := Announce(ctx, transport.Port, ""); err != nil {
+	if err := Announce(ctx, transport.Port, "", m.deviceID); err != nil {
 		cancel()
 		return err
 	}
@@ -87,7 +91,7 @@ func (m *Manager) Start() error {
 	}()
 
 	go func() {
-		if err := Browse(ctx, added); err != nil {
+		if err := Browse(ctx, added, m.deviceID); err != nil {
 			if ctx.Err() == nil {
 				log.Printf("[sync] browse error: %v", err)
 			}
@@ -239,7 +243,7 @@ func (m *Manager) eventLoop(ctx context.Context, added <-chan Peer) {
 				}
 			}
 		case peer := <-added:
-			m.peerMap.AddOrUpdate(peer.ID, peer.Addr)
+			m.peerMap.AddOrUpdatePeer(peer)
 		}
 	}
 }

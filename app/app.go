@@ -125,7 +125,7 @@ func (m *MercuryApp) startSync(passphrase string) {
 		m.clipSvc.Stop()
 	}
 
-	m.syncSvc = services.NewSyncService(passphrase)
+	m.syncSvc = services.NewSyncService(passphrase, storage.EnsureDeviceID(m.db))
 
 	// Wire the shared TCP listener: sync handles clipboard, transfer handles
 	// file chunks.  They don't know about each other — OnMessage is the glue.

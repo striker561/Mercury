@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/grandcat/zeroconf"
@@ -31,12 +32,30 @@ func hostname() string {
 	return h
 }
 
+// peerIDFromEntry returns the stable machine ID announced in a service
+// entry's TXT record ("id=<uuid>"), or "" for legacy peers without one.
+func peerIDFromEntry(entry *zeroconf.ServiceEntry) string {
+	for _, kv := range entry.Text {
+		if strings.HasPrefix(kv, "id=") {
+			return strings.TrimPrefix(kv, "id=")
+		}
+	}
+	return ""
+}
+
 // Announce registers this Mercury instance on the LAN via mDNS so other
 // instances can discover it.  The server shuts down automatically when
-// ctx is cancelled.
-func Announce(ctx context.Context, port int, instance string) error {
+// ctx is cancelled.  deviceID is advertised in the TXT record so peers can
+// dedup us across hostname changes (dual-boot).
+func Announce(ctx context.Context, port int, instance, deviceID string) error {
 	if instance == "" {
 		instance = hostname()
+	}
+
+	// Advertise our stable machine ID in the TXT record.
+	var text []string
+	if deviceID != "" {
+		text = []string{"id=" + deviceID}
 	}
 
 	server, err := zeroconf.Register(
@@ -44,7 +63,7 @@ func Announce(ctx context.Context, port int, instance string) error {
 		serviceType, // service type: _mercury._tcp
 		domain,      // domain: local.
 		port,        // port
-		nil,         // no metadata text entries
+		text,        // TXT metadata (stable machine id)
 		nil,         // all interfaces
 	)
 	if err != nil {
@@ -66,7 +85,7 @@ func Announce(ctx context.Context, port int, instance string) error {
 // goroutines and returns immediately.  We must NOT use a "browse done"
 // signal to exit the loop; entries arrive asynchronously on the channel
 // until ctx is cancelled.
-func Browse(ctx context.Context, added chan<- Peer) error {
+func Browse(ctx context.Context, added chan<- Peer, deviceID string) error {
 	resolver, err := zeroconf.NewResolver()
 	if err != nil {
 		return fmt.Errorf("sync mDNS resolver: %w", err)
@@ -87,8 +106,13 @@ func Browse(ctx context.Context, added chan<- Peer) error {
 				return nil
 			}
 
-			// Skip ourselves.
+			// Skip ourselves — by hostname for legacy peers, or by stable
+			// machine ID so a dual-boot machine announcing its other OS's
+			// hostname doesn't discover itself.
 			if entry.Instance == hostname() {
+				continue
+			}
+			if deviceID != "" && peerIDFromEntry(entry) == deviceID {
 				continue
 			}
 
@@ -129,9 +153,19 @@ func resolveEntry(entry *zeroconf.ServiceEntry) *Peer {
 		return nil
 	}
 
+	// Prefer the stable machine ID announced in TXT (dual-boot dedup);
+	// fall back to the instance hostname for legacy peers that don't
+	// announce one.  Hostname is kept for display only.
+	deviceID := peerIDFromEntry(entry)
+	id := deviceID
+	if id == "" {
+		id = entry.Instance
+	}
+
 	return &Peer{
-		ID:   entry.Instance,
-		Addr: addrStr,
+		ID:       id,
+		Hostname: entry.Instance,
+		Addr:     addrStr,
 	}
 }
 

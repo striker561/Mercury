@@ -159,3 +159,43 @@ func TestPeerMapGetPeersSorted(t *testing.T) {
 		}
 	}
 }
+
+func TestPeerMapAddOrUpdatePeerDedupByMachineID(t *testing.T) {
+	pm := NewPeerMap()
+	defer pm.Stop()
+
+	// Same physical machine, two OSes: same machine ID, same IP, different
+	// hostnames.  Dedup by machine ID must collapse them into one entry.
+	pm.AddOrUpdatePeer(Peer{ID: "mach-1", Hostname: "DESKTOP-ABC", Addr: "192.168.1.10:47821"})
+	pm.AddOrUpdatePeer(Peer{ID: "mach-1", Hostname: "mercury-laptop", Addr: "192.168.1.10:47821"})
+
+	if pm.Len() != 1 {
+		t.Fatalf("expected 1 peer after machine-ID dedup, got %d", pm.Len())
+	}
+	peers := pm.GetPeers()
+	if len(peers) != 1 {
+		t.Fatalf("expected 1 peer, got %d", len(peers))
+	}
+	// The hostname should reflect the latest announcement (the OS that just
+	// booted), while the ID stays the stable machine ID.
+	if peers[0].ID != "mach-1" {
+		t.Fatalf("ID = %q, want stable machine ID mach-1", peers[0].ID)
+	}
+	if peers[0].Hostname != "mercury-laptop" {
+		t.Fatalf("Hostname = %q, want latest announcement mercury-laptop", peers[0].Hostname)
+	}
+}
+
+func TestPeerMapDistinctMachinesNotMerged(t *testing.T) {
+	pm := NewPeerMap()
+	defer pm.Stop()
+
+	// Two genuinely different machines must stay separate even if they have
+	// the same hostname (each has its own machine ID).
+	pm.AddOrUpdatePeer(Peer{ID: "mach-a", Hostname: "office-pc", Addr: "192.168.1.20:47821"})
+	pm.AddOrUpdatePeer(Peer{ID: "mach-b", Hostname: "office-pc", Addr: "192.168.1.21:47821"})
+
+	if pm.Len() != 2 {
+		t.Fatalf("expected 2 distinct peers, got %d", pm.Len())
+	}
+}

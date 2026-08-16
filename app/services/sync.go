@@ -41,10 +41,11 @@ func (s *SyncService) SetOnMessage(handler func(byte, []byte)) {
 	s.manager.OnMessage = handler
 }
 
-// NewSyncService creates a sync service with the given passphrase.
-func NewSyncService(passphrase string) *SyncService {
+// NewSyncService creates a sync service with the given passphrase and this
+// machine's stable device ID (announced via mDNS TXT for dual-boot dedup).
+func NewSyncService(passphrase, deviceID string) *SyncService {
 	return &SyncService{
-		manager: sync.NewManager(passphrase),
+		manager: sync.NewManager(passphrase, deviceID),
 	}
 }
 
@@ -147,7 +148,7 @@ func (s *SyncService) GetPeers() []map[string]string {
 	for i, p := range peers {
 		result[i] = map[string]string{
 			"id":       p.ID,
-			"hostname": p.ID,
+			"hostname": p.Hostname,
 			"addr":     p.Addr,
 			"lastSeen": p.LastSeen.Format("15:04:05"),
 		}
