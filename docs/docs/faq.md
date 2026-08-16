@@ -11,6 +11,14 @@ sidebar_position: 6
 - Firewall allows **TCP 47821**.
 - mDNS enabled on your router (default on most home networks).
 
+Mercury retries discovery automatically when the network changes or no peers are found for a while, so you should not need to restart sync.
+
+## Dual-boot: why is one machine shown twice?
+
+If you dual-boot a single machine (e.g. Windows and Linux on the same hardware), each OS used to announce itself under a different hostname with the same IP, so Mercury showed the same physical machine twice.
+
+Mercury now identifies peers by a **stable machine ID** — a random value generated once and advertised in the mDNS TXT record. The same physical machine therefore appears **once**, regardless of which OS is booted. The name shown is whichever OS last announced its hostname.
+
 ## Passphrase mismatch
 
 If peers appear but clipboard never syncs, passphrases may differ. After several decrypt failures, Home shows a warning. Set the same secret on all devices and restart sync.

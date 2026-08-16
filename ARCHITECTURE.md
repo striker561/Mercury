@@ -24,7 +24,7 @@ main.go
       ├─ sync.go         ← SyncService
       ├─ transfer.go     ← TransferService
       └─ clipboard.go    ← ClipboardService
-         ├─ app/backend/sync/       ← mDNS discovery, peer map, clipboard event loop
+         ├─ app/backend/sync/       ← mDNS discovery, peer map, clipboard event loop, network-change watcher
          ├─ app/backend/transfer/   ← file offers, chunked send/receive
          ├─ app/backend/clipboard/  ← OS clipboard watcher
          ├─ app/backend/crypto/     ← Encrypt / Decrypt / DeriveKey
@@ -39,9 +39,9 @@ main.go
 [1 byte type][4 bytes big-endian length][payload bytes]
 ```
 
-| Type | Content | Encryption |
-|------|---------|------------|
-| `0` (clipboard) | Encrypted text or image | AES-256-GCM |
+| Type             | Content                      | Encryption  |
+| ---------------- | ---------------------------- | ----------- |
+| `0` (clipboard)  | Encrypted text or image      | AES-256-GCM |
 | `1` (file chunk) | Encrypted 256 KiB file chunk | AES-256-GCM |
 
 The type byte is **not** encrypted — it's a routing hint. The payload is always
