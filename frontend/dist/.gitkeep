@@ -1,0 +1,5 @@
+# DO NOT DELETE — placeholder so main.go's `//go:embed all:frontend/dist`
+# matches in a fresh checkout. CI runs `go vet ./...` before the frontend
+# build populates this directory; without this file the embed fails with
+# "pattern all:frontend/dist: no matching files found".
+# (.gitignore explicitly un-ignores this file: `!frontend/dist/.gitkeep`)
