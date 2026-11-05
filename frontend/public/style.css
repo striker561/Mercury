@@ -538,6 +538,10 @@ textarea {
   line-height: 1.45;
 }
 
+.connection-hero-action {
+  margin-top: 10px;
+}
+
 .connection-nodes {
   display: flex;
   align-items: center;
@@ -799,6 +803,10 @@ textarea {
 
 .save-feedback.visible {
   opacity: 1;
+}
+
+.save-error {
+  color: var(--red);
 }
 
 /* ─── Peer list ─── */

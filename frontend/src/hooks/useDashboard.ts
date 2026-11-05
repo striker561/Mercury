@@ -28,6 +28,8 @@ function normalize(raw: RawDashboardState): DashboardState {
     offers: raw.offers ?? [],
     transfers: raw.transfers ?? [],
     hint: raw.hint ?? "",
+    syncRunning: raw.syncRunning ?? false,
+    syncError: raw.syncError ?? "",
     vpnActive: raw.vpnActive ?? false,
     gnomeTrayTip: raw.gnomeTrayTip ?? false,
   };

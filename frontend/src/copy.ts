@@ -16,6 +16,14 @@ export const copy = {
     pausedTitle: "I rest",
     pausedSub: "Resume me in Settings when you are ready to serve again.",
     issueTitle: "Something is wrong",
+    syncErrorTitle: "Sync needs attention",
+    syncStoppedTitle: "Sync is stopped",
+    syncStoppedSub: "I am not listening right now. Retry to start again.",
+    searchingTitle: "Searching for devices",
+    searchingSub:
+      "I am listening on this network. Open Mercury on another machine with the same passphrase.",
+    retry: "Retry",
+    retrying: "Retrying…",
     vpnTitle: "VPN detected",
     vpnSub:
       "Your VPN may block LAN sync. If copies fail one way, turn the VPN off and try again.",

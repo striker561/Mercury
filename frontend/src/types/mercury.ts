@@ -28,6 +28,8 @@ export interface DashboardState {
   offers: FileOffer[];
   transfers: FileProgress[];
   hint?: string;
+  syncRunning?: boolean;
+  syncError?: string;
   vpnActive?: boolean;
   gnomeTrayTip?: boolean;
 }

@@ -21,6 +21,7 @@ export default function Settings({
   const [startup, setStartup] = useState(false);
   const [folder, setFolder] = useState("~/Downloads/Mercury/");
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -42,7 +43,13 @@ export default function Settings({
   }, [focusPassphrase]);
 
   const save = async () => {
+    setSaveError("");
     await MercuryApp.SetPassphrase(pass);
+    const state = await MercuryApp.GetDashboardState();
+    if (state?.syncError) {
+      setSaveError(state.syncError);
+      return;
+    }
     setSaved(true);
     onPassphraseSaved?.();
     setTimeout(() => setSaved(false), 2000);
@@ -119,6 +126,7 @@ export default function Settings({
               {copy.settings.saved}
             </span>
           </div>
+          {saveError && <p className="group-note save-error">{saveError}</p>}
         </div>
       </section>
 

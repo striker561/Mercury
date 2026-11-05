@@ -1,9 +1,11 @@
-import { Fragment } from "react";
+import { Fragment, useCallback, useState } from "react";
+import { MercuryApp } from "../../bindings/mercury/app";
 import { copy } from "../copy";
 import type { DashboardState } from "../types/mercury";
 
 interface Props {
   state: DashboardState;
+  onRetry?: () => void;
 }
 
 function ConnectionNodes({
@@ -41,18 +43,54 @@ function ConnectionNodes({
   );
 }
 
-export default function ConnectionHero({ state }: Props) {
-  const { peers, paused, hint, vpnActive, gnomeTrayTip } = state;
+export default function ConnectionHero({ state, onRetry }: Props) {
+  const {
+    peers,
+    paused,
+    hint,
+    vpnActive,
+    gnomeTrayTip,
+    hasPassphrase,
+    syncRunning,
+    syncError,
+  } = state;
   const count = peers.length;
+  const [retrying, setRetrying] = useState(false);
+
+  const retry = useCallback(async () => {
+    setRetrying(true);
+    try {
+      const pass = await MercuryApp.GetSavedPassphrase();
+      if (pass) {
+        await MercuryApp.SetPassphrase(pass);
+      }
+      onRetry?.();
+    } finally {
+      setRetrying(false);
+    }
+  }, [onRetry]);
 
   let title: string;
   let sub: string;
   let warn = false;
   let heroClass = "connection-hero";
+  let showRetry = false;
 
   if (paused) {
     title = copy.status.pausedTitle;
     sub = copy.status.pausedSub;
+  } else if (syncError) {
+    title = copy.status.syncErrorTitle;
+    sub = syncError;
+    warn = true;
+    heroClass += " connection-hero-warn";
+    showRetry = hasPassphrase;
+  } else if (hasPassphrase && !syncRunning) {
+    title = copy.status.syncStoppedTitle;
+    sub = copy.status.syncStoppedSub;
+    warn = true;
+    heroClass += " connection-hero-warn";
+    showRetry = true;
   } else if (hint) {
     title = copy.status.issueTitle;
     sub = hint;
@@ -66,12 +104,16 @@ export default function ConnectionHero({ state }: Props) {
   } else if (count > 0) {
     title = copy.status.connectedTitle(count);
     sub = copy.status.connectedSub;
+  } else if (hasPassphrase) {
+    title = copy.status.searchingTitle;
+    sub = copy.status.searchingSub;
   } else {
     title = copy.status.waitingTitle;
     sub = copy.status.waitingSub;
   }
 
-  const showNodes = !hint && !vpnActive;
+  const showNodes =
+    !hint && !vpnActive && !syncError && (syncRunning || paused || !hasPassphrase);
 
   return (
     <div className={heroClass}>
@@ -90,7 +132,19 @@ export default function ConnectionHero({ state }: Props) {
           </div>
         </div>
       </div>
-      {gnomeTrayTip && !hint && !vpnActive && (
+      {showRetry && (
+        <div className="connection-hero-action">
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={retry}
+            disabled={retrying}
+          >
+            {retrying ? copy.status.retrying : copy.status.retry}
+          </button>
+        </div>
+      )}
+      {gnomeTrayTip && !hint && !vpnActive && !syncError && (
         <div className="connection-hero-foot">{copy.status.gnomeTip}</div>
       )}
     </div>
