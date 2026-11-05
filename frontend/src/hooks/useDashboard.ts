@@ -18,6 +18,7 @@ function normalize(raw: RawDashboardState): DashboardState {
       id: p.id ?? "",
       hostname: p.hostname ?? p.id ?? "",
       addr: p.addr ?? "",
+      reachable: p.reachable === "true",
       lastSeen: p.lastSeen,
     }));
 

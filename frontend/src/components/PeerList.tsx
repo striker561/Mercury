@@ -40,6 +40,19 @@ export default function PeerList({ peers }: Props) {
                     {peerInitial(name)}
                   </span>
                   <span className="peer-name">{name}</span>
+                  <span
+                    className={`peer-status${peer.reachable ? " online" : ""}`}
+                    title={
+                      peer.reachable
+                        ? copy.peers.reachable
+                        : copy.peers.checking
+                    }
+                    aria-label={
+                      peer.reachable
+                        ? copy.peers.reachable
+                        : copy.peers.checking
+                    }
+                  />
                   <span className="peer-addr">{peerIP(peer.addr)}</span>
                 </li>
               );

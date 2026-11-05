@@ -53,6 +53,8 @@ export const copy = {
     emptyHint:
       "Other machines show up here once Mercury is running on the same LAN.",
     unknown: "Unknown device",
+    checking: "Checking connection…",
+    reachable: "Connected",
   },
 
   transfers: {
@@ -74,10 +76,10 @@ export const copy = {
     presenceHint: "Whether I wake when you log in.",
     passphrase: "Passphrase",
     passphrasePlaceholder: "Same on every device",
+    passphraseRequired: "Set a passphrase first.",
+    autoSaveHint: "Saves when you leave the field or press Enter.",
     syncEnabled: "Clipboard sync",
     syncEnabledHint: "Off means I rest. No watching, no delivering.",
-    save: "Save & start",
-    saved: "Saved",
     saveTo: "Save files to",
     change: "Choose…",
     acceptFiles: "Allow file offers",

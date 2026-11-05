@@ -2,6 +2,7 @@ export interface Peer {
   id: string;
   hostname?: string;
   addr: string;
+  reachable?: boolean;
   lastSeen?: string;
 }
 
