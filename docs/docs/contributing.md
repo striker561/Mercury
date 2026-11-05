@@ -11,8 +11,8 @@ Mercury is an open-source learning project. Contributions are welcome: bug fixes
 ```bash
 git clone https://github.com/striker561/Mercury.git
 cd Mercury
-go install github.com/wailsapp/wails/v3/cmd/wails3@latest
-GOTOOLCHAIN=go1.25.12 wails3 dev
+go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0
+GOTOOLCHAIN=go1.26.0 wails3 dev
 ```
 
 ## Tests

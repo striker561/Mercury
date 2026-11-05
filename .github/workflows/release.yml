@@ -35,7 +35,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.26"
           cache: true
 
       - uses: oven-sh/setup-bun@v2
@@ -54,7 +54,7 @@ jobs:
           key: frontend-${{ hashFiles('frontend/bun.lock', 'frontend/bun.lockb', 'frontend/package.json') }}
 
       - name: Install Wails v3
-        run: go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0
 
       - name: Generate bindings
         run: wails3 generate bindings -ts -i -clean=true
@@ -85,7 +85,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.26"
           cache: true
 
       - uses: oven-sh/setup-bun@v2
@@ -112,7 +112,7 @@ jobs:
 
       - name: Install Wails v3 and nfpm
         run: |
-          go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0
           go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
 
       - name: Generate bindings
@@ -148,7 +148,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.26"
           cache: true
 
       - uses: oven-sh/setup-bun@v2
@@ -169,7 +169,7 @@ jobs:
         run: tar xzf frontend-build.tar.gz -C frontend
 
       - name: Install Wails v3
-        run: go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0
 
       - name: Inject version into Info.plist
         run: |
@@ -207,7 +207,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.26"
           cache: true
 
       - uses: oven-sh/setup-bun@v2
@@ -222,7 +222,7 @@ jobs:
         run: tar xzf frontend-build.tar.gz -C frontend
 
       - name: Install Wails v3
-        run: go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0
 
       - name: Install NSIS
         run: choco install nsis -y
