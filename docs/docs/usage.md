@@ -14,6 +14,8 @@ sidebar_position: 3
 
 On macOS, Mercury uses an accessory app (menu bar only, no Dock icon by default).
 
+On Linux with AppIndicator, a left-click may open the tray menu instead of toggling the window; use **Open Mercury**.
+
 ## Window
 
 - **Home:** connection status, peer list, incoming file offers, active transfers
