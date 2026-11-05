@@ -24,3 +24,12 @@ func TestHasActiveTransfers(t *testing.T) {
 		t.Fatal("accepting transfer must block a network resync")
 	}
 }
+
+func TestOfferPeerReturnsSender(t *testing.T) {
+	m := NewManager(nil)
+	m.IncomingOfferWithID("0123456789abcdef", "file.bin", 1, "10.0.0.5:47821")
+
+	if got := m.OfferPeer("0123456789abcdef"); got != "10.0.0.5:47821" {
+		t.Fatalf("OfferPeer = %q, want the sender address", got)
+	}
+}

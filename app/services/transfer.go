@@ -41,6 +41,11 @@ func (s *TransferService) PendingOffers() []FileOffer {
 	return s.mgr.PendingOffers()
 }
 
+// OfferPeer returns the address that sent a pending offer.
+func (s *TransferService) OfferPeer(offerID string) string {
+	return s.mgr.OfferPeer(offerID)
+}
+
 // AcceptOffer starts receiving a file. Returns a transfer ID.
 func (s *TransferService) AcceptOffer(offerID, saveDir string) (string, error) {
 	return s.mgr.AcceptOffer(offerID, saveDir)
