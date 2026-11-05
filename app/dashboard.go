@@ -91,7 +91,7 @@ func (m *MercuryApp) DashboardFingerprint() string {
 		peerCount = len(peers)
 		fmt.Fprintf(&b, "p=%d", peerCount)
 		for _, p := range peers {
-			fmt.Fprintf(&b, " %s@%s", p["id"], p["addr"])
+			fmt.Fprintf(&b, " %s@%s:%s", p["id"], p["addr"], p["reachable"])
 		}
 	} else {
 		b.WriteString("p=0")

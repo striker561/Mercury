@@ -31,19 +31,18 @@ func Run(assets embed.FS) error {
 
 	// Create notification service for OS-level file offer alerts.
 	// On macOS this requires a bundled .app with a valid CFBundleIdentifier
-	// (only available in production builds).  In dev mode we skip it.
+	// (only available in production builds).  In dev mode we fall back to
+	// osascript instead of registering a service that cannot deliver.
 	notifySvc := notifications.New()
-	mercuryApp.SetNotifier(notifySvc)
 
 	svcs := []application.Service{
 		application.NewService(mercuryApp),
 	}
-	// Only register the notification service when running from a proper
-	// macOS bundle (or on Linux/Windows where it always works).
 	if !isDarwinDev() {
 		svcs = append(svcs, application.NewService(notifySvc))
+		mercuryApp.SetNotifier(notifySvc)
 	} else {
-		log.Println("[mercury] skipping notification service (dev mode — no bundle ID)")
+		log.Println("[mercury] notification service unavailable (dev mode — using osascript)")
 	}
 
 	var settingsWindow *application.WebviewWindow
@@ -79,14 +78,7 @@ func Run(assets embed.FS) error {
 	if err := configureUpdater(app); err != nil {
 		return err
 	}
-	startSilentUpdateCheck(app, func(title, body string) {
-		if notifySvc != nil {
-			_ = notifySvc.SendNotification(notifications.NotificationOptions{
-				Title: title,
-				Body:  body,
-			})
-		}
-	})
+	startSilentUpdateCheck(app, mercuryApp.notify)
 
 	// Create the settings window (hidden by default, shown on tray click).
 	settingsWindow = app.Window.NewWithOptions(application.WebviewWindowOptions{
