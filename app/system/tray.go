@@ -61,7 +61,7 @@ func BuildMenu(app *application.App, showFn, onUpdateChecked func()) (*applicati
 				log.Printf("[mercury] update install: %v", err)
 			}
 			checkItem.SetLabel(updateResultLabel(err, app.Updater.State()))
-			if onUpdateChecked != nil {
+			if err == nil && onUpdateChecked != nil {
 				onUpdateChecked()
 			}
 		}()

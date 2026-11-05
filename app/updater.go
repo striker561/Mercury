@@ -90,11 +90,11 @@ func startSilentUpdateCheck(app *application.App, mercuryApp *MercuryApp) {
 		defer cancel()
 
 		rel, err := app.Updater.Check(ctx)
-		mercuryApp.markUpdateChecked()
 		if err != nil {
 			log.Printf("[mercury] update check: %v", err)
 			return
 		}
+		mercuryApp.markUpdateChecked()
 		if rel == nil {
 			return
 		}
