@@ -22,6 +22,8 @@ const singleInstanceID = "com.mercury.app"
 // Run is the real Mercury entry point, called from root main.go.
 // assets is the embedded frontend/dist from the root module.
 func Run(assets embed.FS) error {
+	configureLinuxRenderer()
+
 	// Detect if running under GNOME (tray may not work without AppIndicator).
 	isGNOME := detectGNOME()
 
@@ -217,6 +219,31 @@ func isDarwinDev() bool {
 	}
 	// A bundled .app has a path like .../Mercury.app/Contents/MacOS/mercury
 	return !strings.Contains(filepath.ToSlash(exe), ".app/Contents/MacOS/")
+}
+
+// Temporary: WebKitGTK cannot create an EGL context on COSMIC Wayland with
+// NVIDIA (Wails #4985). Remove when the upstream stack handles it.
+const linuxX11Fallback = true
+
+func configureLinuxRenderer() {
+	if !linuxX11Fallback {
+		return
+	}
+	_, nvidiaErr := os.Stat("/sys/module/nvidia")
+	if !needsX11Backend(runtime.GOOS, os.Getenv("GDK_BACKEND"), os.Getenv("XDG_SESSION_TYPE"), os.Getenv("WAYLAND_DISPLAY"), os.Getenv("XDG_CURRENT_DESKTOP"), nvidiaErr == nil) {
+		return
+	}
+	_ = os.Setenv("GDK_BACKEND", "x11")
+	log.Println("[mercury] COSMIC + NVIDIA Wayland detected; using X11 backend")
+}
+
+func needsX11Backend(goos, gdkBackend, sessionType, waylandDisplay, desktop string, hasNVIDIA bool) bool {
+	wayland := sessionType == "wayland" || waylandDisplay != ""
+	return goos == "linux" &&
+		gdkBackend == "" &&
+		strings.Contains(strings.ToUpper(desktop), "COSMIC") &&
+		wayland &&
+		hasNVIDIA
 }
 
 // detectGNOME checks if we're running under the GNOME desktop environment.
