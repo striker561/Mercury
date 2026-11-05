@@ -86,6 +86,11 @@ func (s *TransferService) AllProgress() []FileProgress {
 	return s.mgr.AllProgress()
 }
 
+// Progress returns one transfer's live state, or nil if it is unknown.
+func (s *TransferService) Progress(tid string) *FileProgress {
+	return s.mgr.Progress(tid)
+}
+
 // HasActiveTransfers reports whether a send or receive is in flight.
 func (s *TransferService) HasActiveTransfers() bool {
 	return s.mgr.HasActiveTransfers()

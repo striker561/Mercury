@@ -243,8 +243,8 @@ func TestIntegrationWrongKeyRejected(t *testing.T) {
 	defer ln.Close()
 
 	offerID := "deadbeefdeadbeef"
-	ch := make(chan []byte, 2)
-	recvMgr.receiveCh[offerID] = ch
+	stream := newTestReceiveStream()
+	recvMgr.receiveCh[offerID] = stream
 
 	conn, err := net.Dial("tcp", ln.addr)
 	if err != nil {
@@ -266,7 +266,7 @@ func TestIntegrationWrongKeyRejected(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 	select {
-	case <-ch:
+	case <-stream.chunks:
 		t.Fatal("chunk encrypted with wrong key should not be delivered")
 	default:
 	}
@@ -279,8 +279,8 @@ func TestIntegrationTamperedCiphertextDropped(t *testing.T) {
 	defer ln.Close()
 
 	offerID := "abababababababab"
-	ch := make(chan []byte, 2)
-	recvMgr.receiveCh[offerID] = ch
+	stream := newTestReceiveStream()
+	recvMgr.receiveCh[offerID] = stream
 
 	wire, _ := packChunkPayload(offerID, []byte("data"))
 	enc, err := crypto.Encrypt(wire, key)
@@ -300,7 +300,7 @@ func TestIntegrationTamperedCiphertextDropped(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 	select {
-	case <-ch:
+	case <-stream.chunks:
 		t.Fatal("tampered ciphertext should not be delivered")
 	default:
 	}

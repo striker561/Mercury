@@ -29,8 +29,9 @@ import (
 )
 
 const (
-	chunkSize   = 256 * 1024 // 256 KiB per chunk
-	dialTimeout = 5 * time.Second
+	chunkSize    = 256 * 1024 // 256 KiB per chunk
+	dialTimeout  = 5 * time.Second
+	writeTimeout = 30 * time.Second
 
 	maxTerminalTransfers = 50
 	maxOutgoingOffers    = 50
@@ -65,6 +66,12 @@ type outgoingOffer struct {
 	at   time.Time
 }
 
+type receiveStream struct {
+	chunks chan []byte
+	end    chan struct{}
+	done   chan struct{}
+}
+
 // Progress contains live transfer state for the frontend.
 type Progress struct {
 	ID        string    `json:"id"`
@@ -73,6 +80,7 @@ type Progress struct {
 	Received  int64     `json:"received"`
 	Speed     int64     `json:"speed"` // bytes/sec, 0 when idle
 	Status    Status    `json:"status"`
+	Error     string    `json:"error,omitempty"`
 	CreatedAt time.Time `json:"created_at"` // arrival order — used to stabilise the UI list
 }
 
@@ -88,7 +96,7 @@ type Manager struct {
 	cancel    map[string]chan struct{} // tid → close to cancel
 	nextID    atomic.Int64
 
-	receiveCh map[string]chan []byte // offer ID → decrypted chunks for active receives
+	receiveCh map[string]*receiveStream // offer ID → active receive
 
 	// OnOffer is called when a file offer arrives from the network.
 	OnOffer func(o Offer)
@@ -105,7 +113,7 @@ func NewManager(key []byte) *Manager {
 		outgoing:  make(map[string]outgoingOffer),
 		transfers: make(map[string]*Progress),
 		cancel:    make(map[string]chan struct{}),
-		receiveCh: make(map[string]chan []byte),
+		receiveCh: make(map[string]*receiveStream),
 	}
 }
 
@@ -123,17 +131,16 @@ func (m *Manager) OnWireMessage(msgType byte, payload []byte) {
 		chunk := payload[offerIDLen:]
 
 		m.mu.Lock()
-		ch := m.receiveCh[offerID]
+		stream := m.receiveCh[offerID]
 		m.mu.Unlock()
-		if ch == nil {
-			log.Printf("[transfer] chunk for unknown offer %s", offerID)
+		if stream == nil {
 			return
 		}
 
+		// Blocking send is backpressure: the TCP reader waits for the disk.
 		select {
-		case ch <- chunk:
-		default:
-			log.Printf("[transfer] dropped chunk (channel full) for offer %s", offerID)
+		case stream.chunks <- chunk:
+		case <-stream.done:
 		}
 
 	case transport.MsgFileEnd:
@@ -144,13 +151,13 @@ func (m *Manager) OnWireMessage(msgType byte, payload []byte) {
 		offerID := string(payload)
 
 		m.mu.Lock()
-		ch := m.receiveCh[offerID]
+		stream := m.receiveCh[offerID]
 		delete(m.receiveCh, offerID)
 		m.mu.Unlock()
-		if ch == nil {
+		if stream == nil {
 			return
 		}
-		close(ch)
+		close(stream.end)
 	}
 }
 
@@ -237,12 +244,16 @@ func (m *Manager) AcceptOffer(offerID, saveDir string) (string, error) {
 	m.pruneTerminalLocked()
 	m.mu.Unlock()
 
-	ch := make(chan []byte, 20)
+	stream := &receiveStream{
+		chunks: make(chan []byte, 20),
+		end:    make(chan struct{}),
+		done:   make(chan struct{}),
+	}
 	m.mu.Lock()
-	m.receiveCh[offerID] = ch
+	m.receiveCh[offerID] = stream
 	m.mu.Unlock()
 
-	go m.receiveFile(tid, offerID, o, saveDir, ch)
+	go m.receiveFile(tid, offerID, o, saveDir, stream)
 	return tid, nil
 }
 
@@ -421,6 +432,16 @@ func (m *Manager) updateStatus(tid string, s Status, received int64) {
 	if p, ok := m.transfers[tid]; ok {
 		p.Status = s
 		p.Received = received
+	}
+	m.mu.Unlock()
+}
+
+func (m *Manager) fail(tid, reason string) {
+	m.mu.Lock()
+	if p, ok := m.transfers[tid]; ok {
+		p.Status = StatusFailed
+		p.Speed = 0
+		p.Error = reason
 	}
 	m.mu.Unlock()
 }
