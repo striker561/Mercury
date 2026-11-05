@@ -6,13 +6,19 @@ import (
 	"log"
 	"net"
 	"sync"
+	"time"
 
 	"mercury/app/backend/crypto"
 	"mercury/app/backend/transport"
 )
 
 // OnReceiveCallback is called when a decrypted clipboard payload arrives.
-type OnReceiveCallback func(payload []byte)
+type OnReceiveCallback func(payload []byte, remoteAddr string)
+
+type incomingClipboard struct {
+	payload    []byte
+	remoteAddr string
+}
 
 // Manager wires mDNS discovery, TCP transport, and crypto for clipboard sync.
 // Create with NewManager, then Start/Stop.
@@ -20,7 +26,7 @@ type Manager struct {
 	key      []byte
 	deviceID string
 	peerMap  *PeerMap
-	incoming chan []byte
+	incoming chan incomingClipboard
 	port     int
 
 	mu           sync.Mutex
@@ -43,7 +49,7 @@ type Manager struct {
 	// OnMessage, if set, is called for every message the listener receives
 	// that is NOT MsgClipboard.  The app layer uses this to route file
 	// chunks to the transfer manager without coupling sync to transfer.
-	OnMessage func(msgType byte, payload []byte)
+	OnMessage func(msgType byte, payload []byte, remoteAddr string)
 }
 
 // NewManager creates a Manager that derives its encryption key from the
@@ -55,7 +61,7 @@ func NewManager(passphrase, deviceID string) *Manager {
 		key:      crypto.DeriveKey(passphrase),
 		deviceID: deviceID,
 		peerMap:  NewPeerMap(),
-		incoming: make(chan []byte, 10),
+		incoming: make(chan incomingClipboard, 10),
 		port:     transport.Port,
 	}
 }
@@ -98,7 +104,7 @@ func (m *Manager) startLocked() error {
 	m.tcpCancel = cancel
 	m.mu.Unlock()
 	m.boundPort = port
-	m.tcpWG.Add(2)
+	m.tcpWG.Add(3)
 	go func() {
 		defer m.tcpWG.Done()
 		if err := transport.Serve(ctx, listener, m.handleMessage); err != nil && ctx.Err() == nil {
@@ -108,6 +114,10 @@ func (m *Manager) startLocked() error {
 	go func() {
 		defer m.tcpWG.Done()
 		m.eventLoop(ctx, added)
+	}()
+	go func() {
+		defer m.tcpWG.Done()
+		m.heartbeatLoop(ctx)
 	}()
 
 	if err := m.startDiscoveryLocked(added, port); err != nil {
@@ -127,17 +137,17 @@ func (m *Manager) startLocked() error {
 	return nil
 }
 
-func (m *Manager) handleMessage(msgType byte, payload []byte) {
+func (m *Manager) handleMessage(msgType byte, payload []byte, remoteAddr string) {
 	if msgType == transport.MsgClipboard {
 		select {
-		case m.incoming <- payload:
+		case m.incoming <- incomingClipboard{payload: payload, remoteAddr: remoteAddr}:
 		default:
 			log.Printf("[sync] dropped incoming (channel full)")
 		}
 		return
 	}
 	if m.OnMessage != nil {
-		m.OnMessage(msgType, payload)
+		m.OnMessage(msgType, payload, remoteAddr)
 	}
 }
 
@@ -313,6 +323,26 @@ func (m *Manager) Broadcast(payload []byte) {
 	wg.Wait()
 }
 
+// SendTo encrypts one payload and sends it to a single address.
+func (m *Manager) SendTo(addr string, payload []byte) error {
+	m.mu.Lock()
+	key := m.key
+	running := m.running
+	m.mu.Unlock()
+
+	if !running {
+		return fmt.Errorf("sync not running")
+	}
+	ciphertext, err := crypto.Encrypt(payload, key)
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), transport.SendTimeout)
+	defer cancel()
+	return transport.Send(ctx, addr, ciphertext)
+}
+
 // PeerCount returns the number of currently known peers.
 func (m *Manager) PeerCount() int {
 	return m.peerMap.Len()
@@ -337,6 +367,50 @@ func (m *Manager) DecryptFailCount() int {
 	return m.decryptFails
 }
 
+const (
+	heartbeatInterval = 10 * time.Second
+	probeTimeout      = 2 * time.Second
+)
+
+// heartbeatLoop probes every known peer so discovery is not mistaken for
+// reachability, and so a stale address is evicted after a network change.
+func (m *Manager) heartbeatLoop(ctx context.Context) {
+	ticker := time.NewTicker(heartbeatInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			for _, p := range m.peerMap.GetPeers() {
+				go m.probePeer(ctx, p)
+			}
+		}
+	}
+}
+
+func (m *Manager) probePeer(ctx context.Context, p Peer) {
+	addrs := p.Addrs
+	if len(addrs) == 0 && p.Addr != "" {
+		addrs = []string{p.Addr}
+	}
+
+	dialer := net.Dialer{Timeout: probeTimeout}
+	for _, addr := range addrs {
+		conn, err := dialer.DialContext(ctx, "tcp", addr)
+		if err == nil {
+			conn.Close()
+			m.peerMap.MarkReachable(p.ID, addr)
+			return
+		}
+	}
+
+	if m.peerMap.RecordFailure(p.ID) {
+		log.Printf("[sync] evicted peer %s (no reachable address)", p.ID)
+	}
+}
+
 // eventLoop decrypts clipboard payloads and dispatches to onReceive.
 // File chunks are handled entirely by the app layer via OnMessage —
 // this event loop knows nothing about them.
@@ -345,11 +419,11 @@ func (m *Manager) eventLoop(ctx context.Context, added <-chan Peer) {
 		select {
 		case <-ctx.Done():
 			return
-		case ciphertext := <-m.incoming:
+		case msg := <-m.incoming:
 			m.mu.Lock()
 			key := m.key
 			m.mu.Unlock()
-			decrypted, err := crypto.Decrypt(ciphertext, key)
+			decrypted, err := crypto.Decrypt(msg.payload, key)
 			if err != nil {
 				m.mu.Lock()
 				m.decryptFails++
@@ -360,7 +434,7 @@ func (m *Manager) eventLoop(ctx context.Context, added <-chan Peer) {
 				m.decryptFails = 0
 				m.mu.Unlock()
 				if m.onReceive != nil {
-					m.onReceive(decrypted)
+					m.onReceive(decrypted, msg.remoteAddr)
 				}
 			}
 		case peer := <-added:

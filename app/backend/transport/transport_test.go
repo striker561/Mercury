@@ -37,7 +37,7 @@ func TestWriteFrameMultipleOnConnection(t *testing.T) {
 			t.Errorf("accept: %v", err)
 			return
 		}
-		handleConn(conn, func(msgType byte, payload []byte) {
+		handleConn(conn, func(msgType byte, payload []byte, _ string) {
 			gotTypes = append(gotTypes, msgType)
 			gotPayloads = append(gotPayloads, bytes.Clone(payload))
 		})

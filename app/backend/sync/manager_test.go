@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"sync"
@@ -83,4 +84,45 @@ func TestManagerConcurrentStart(t *testing.T) {
 		t.Fatal("not running after concurrent start")
 	}
 	m.Stop()
+}
+
+func TestProbePeerMarksReachable(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			conn.Close()
+		}
+	}()
+
+	m := NewManager("test-passphrase", "test-device")
+	m.peerMap.AddOrUpdatePeer(Peer{ID: "peer1", Hostname: "peer1", Addr: ln.Addr().String()})
+	m.probePeer(context.Background(), m.peerMap.GetPeers()[0])
+
+	peers := m.peerMap.GetPeers()
+	if len(peers) != 1 || !peers[0].Reachable {
+		t.Fatalf("peer not marked reachable: %+v", peers)
+	}
+}
+
+func TestProbePeerEvictsUnreachable(t *testing.T) {
+	m := NewManager("test-passphrase", "test-device")
+	p := Peer{ID: "peer1", Hostname: "peer1", Addr: "127.0.0.1:1"}
+	m.peerMap.AddOrUpdatePeer(p)
+
+	for i := 0; i < maxFailCount; i++ {
+		m.probePeer(context.Background(), p)
+	}
+
+	if m.peerMap.Len() != 0 {
+		t.Fatalf("peer should be evicted, still have %d", m.peerMap.Len())
+	}
 }

@@ -54,3 +54,47 @@ func TestResolveEntryLegacyFallback(t *testing.T) {
 		t.Fatalf("legacy fallback wrong: ID=%q Hostname=%q", p.ID, p.Hostname)
 	}
 }
+
+func TestAddrScore(t *testing.T) {
+	_, lan, err := net.ParseCIDR("192.168.1.0/24")
+	if err != nil {
+		t.Fatal(err)
+	}
+	locals := []*net.IPNet{lan}
+
+	cases := []struct {
+		addr string
+		want int
+	}{
+		{"192.168.1.50:47821", 2},
+		{"10.8.0.5:47821", 1},
+		{"127.0.0.1:47821", -1},
+		{"169.254.1.1:47821", -1},
+		{"not-an-address", -1},
+	}
+	for _, tc := range cases {
+		if got := addrScore(tc.addr, locals); got != tc.want {
+			t.Errorf("addrScore(%q) = %d, want %d", tc.addr, got, tc.want)
+		}
+	}
+}
+
+func TestEntryAddrsKeepsEveryCandidate(t *testing.T) {
+	entry := zeroconf.NewServiceEntry("multi-homed", "_mercury._tcp", "local.")
+	entry.Port = 47821
+	entry.AddrIPv4 = []net.IP{
+		net.ParseIP("10.8.0.5"),
+		net.ParseIP("192.168.1.50"),
+	}
+
+	addrs := entryAddrs(entry)
+	if len(addrs) != 2 {
+		t.Fatalf("got %d addresses, want 2: %v", len(addrs), addrs)
+	}
+	seen := map[string]bool{addrs[0]: true, addrs[1]: true}
+	for _, want := range []string{"10.8.0.5:47821", "192.168.1.50:47821"} {
+		if !seen[want] {
+			t.Fatalf("missing %s in %v", want, addrs)
+		}
+	}
+}

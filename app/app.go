@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -62,6 +63,45 @@ func (m *MercuryApp) HideWindow() {
 // SetNotifier stores the notification service for OS-level alerts.
 func (m *MercuryApp) SetNotifier(ns *notifications.NotificationService) {
 	m.notifySvc = ns
+}
+
+// notify falls back to the OS CLI when the Wails service is unavailable.
+func (m *MercuryApp) notify(title, body string) {
+	if m.notifySvc != nil {
+		err := m.notifySvc.SendNotification(notifications.NotificationOptions{
+			Title: title,
+			Body:  body,
+		})
+		if err == nil {
+			return
+		}
+		log.Printf("[mercury] notification service: %v", err)
+	}
+	if err := sendPlatformNotification(title, body); err != nil {
+		log.Printf("[mercury] notification fallback: %v", err)
+	}
+}
+
+func sendPlatformNotification(title, body string) error {
+	switch runtime.GOOS {
+	case "darwin":
+		script := fmt.Sprintf("display notification %s with title %s",
+			appleScriptQuote(body), appleScriptQuote(title))
+		return exec.Command("osascript", "-e", script).Run()
+	case "linux":
+		if _, err := exec.LookPath("notify-send"); err != nil {
+			return err
+		}
+		return exec.Command("notify-send", title, body).Run()
+	default:
+		return fmt.Errorf("no notification fallback for %s", runtime.GOOS)
+	}
+}
+
+func appleScriptQuote(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	return `"` + s + `"`
 }
 
 // SetGNOMETrayTip marks that the app is running under GNOME.
@@ -143,7 +183,8 @@ func (m *MercuryApp) startSyncLocked(passphrase string) {
 		m.clipSvc.Stop()
 	}
 
-	m.syncSvc = services.NewSyncService(passphrase, storage.EnsureDeviceID(m.db))
+	syncSvc := services.NewSyncService(passphrase, storage.EnsureDeviceID(m.db))
+	m.syncSvc = syncSvc
 
 	// Wire the shared TCP listener: sync handles clipboard, transfer handles
 	// file chunks.  They don't know about each other — OnMessage is the glue.
@@ -152,64 +193,88 @@ func (m *MercuryApp) startSyncLocked(passphrase string) {
 	// types.  Clipboard is decrypted by sync's event loop; file chunks must
 	// be decrypted here before feeding into the transfer manager.
 	key := services.DeriveKey(passphrase)
-	m.transSvc = services.NewTransferService(key)
-	m.syncSvc.SetOnMessage(func(msgType byte, payload []byte) {
+	transSvc := services.NewTransferService(key)
+	m.transSvc = transSvc
+
+	syncSvc.SetOnMessage(func(msgType byte, payload []byte, _ string) {
 		dec, err := crypto.Decrypt(payload, key)
 		if err != nil {
 			log.Printf("[mercury] decrypt chunk: %v", err)
 			return
 		}
-		m.transSvc.OnWireMessage(msgType, dec)
+		transSvc.OnWireMessage(msgType, dec)
 	})
-	m.syncSvc.SetOnFileOffer(func(offerID, fileName string, fileSize int64, peerAddr string) {
+	syncSvc.SetOnFileOffer(func(offerID, fileName string, fileSize int64, peerAddr string) {
 		// Use the sender's offer ID so file_accept maps back correctly.
-		m.transSvc.IncomingOfferWithID(offerID, fileName, fileSize, peerAddr)
-		// Auto-accept if the setting is on.
+		transSvc.IncomingOfferWithID(offerID, fileName, fileSize, peerAddr)
+		// Auto-accept if the setting is on.  Keep the network handshake off
+		// the sync event loop.
 		if m.db != nil && m.db.GetDefaulted(storage.KeyAutoAccept) == "true" {
 			saveDir := resolvePath(m.GetReceivedFolder())
-			m.transSvc.AcceptOffer(offerID, saveDir)
+			go func() {
+				if _, err := m.acceptFileOffer(syncSvc, transSvc, offerID, saveDir); err != nil {
+					log.Printf("[mercury] auto-accept %s: %v", offerID, err)
+				}
+				m.notifyChange()
+			}()
 		}
 		m.notifyChange()
 		if m.showWindow != nil {
 			m.showWindow()
 		}
 		// Fire an OS notification so the user knows a file arrived.
-		if m.notifySvc != nil {
-			go m.notifySvc.SendNotification(notifications.NotificationOptions{
-				Title: "Mercury",
-				Body:  fmt.Sprintf("Incoming file: %s (%d MB)", fileName, fileSize/1024/1024+1),
-			})
-		}
+		go m.notify("Mercury", fmt.Sprintf("Incoming file: %s (%d MB)", fileName, fileSize/1024/1024+1))
 	})
-	// When a peer accepts our file offer, look up the file path and start sending.
-	m.syncSvc.SetOnFileAccept(func(offerID string) {
-		if fp := m.transSvc.AcceptNotification(offerID); fp != "" {
-			log.Printf("[mercury] offer %s accepted, sending %s", offerID, fp)
-			// Take first peer — in practice there's only one sender per offer.
-			peers := m.syncSvc.GetPeers()
-			if len(peers) > 0 {
-				m.transSvc.SendFileForOffer(offerID, peers[0]["addr"], fp)
-			}
+	// When a peer accepts our file offer, reply to the address that accepted.
+	syncSvc.SetOnFileAccept(func(offerID, peerAddr string) {
+		fp := transSvc.AcceptNotification(offerID)
+		if fp == "" {
+			return
+		}
+		if peerAddr == "" {
+			log.Printf("[mercury] offer %s accepted without a peer address", offerID)
+			return
+		}
+		log.Printf("[mercury] offer %s accepted by %s, sending %s", offerID, peerAddr, fp)
+		if _, err := transSvc.SendFileForOffer(offerID, peerAddr, fp); err != nil {
+			log.Printf("[mercury] send offer %s: %v", offerID, err)
 		}
 	})
 
 	// Automatic resync on network change / no-peers.  Refresh the UI after a
 	// resync, but never restart the shared listener mid-transfer (that would
 	// drop the in-flight file stream) — the watcher retries on its next poll.
-	m.syncSvc.SetOnResync(func() {
+	syncSvc.SetOnResync(func() {
 		m.notifyChange()
 	})
-	m.syncSvc.SetResyncAllowed(func() bool {
-		return m.transSvc == nil || !m.transSvc.HasActiveTransfers()
+	syncSvc.SetResyncAllowed(func() bool {
+		return transSvc == nil || !transSvc.HasActiveTransfers()
 	})
 
-	if err := m.syncSvc.Start(); err != nil {
+	if err := syncSvc.Start(); err != nil {
 		log.Printf("[mercury] sync start error: %v", err)
 		m.notifyChange()
 		return
 	}
 
 	m.syncClipboardWatch()
+}
+
+// acceptFileOffer starts the receive and tells the offerer to stream.
+func (m *MercuryApp) acceptFileOffer(syncSvc *services.SyncService, transSvc *services.TransferService, offerID, saveDir string) (string, error) {
+	peerAddr := transSvc.OfferPeer(offerID)
+	if peerAddr == "" {
+		return "", fmt.Errorf("offer %s has no sender address", offerID)
+	}
+
+	tid, err := transSvc.AcceptOffer(offerID, saveDir)
+	if err != nil {
+		return "", err
+	}
+	if err := syncSvc.SendFileAccept(peerAddr, offerID); err != nil {
+		return tid, fmt.Errorf("send accept: %w", err)
+	}
+	return tid, nil
 }
 
 func (m *MercuryApp) shouldWatchClipboard() bool {
@@ -461,18 +526,20 @@ func (m *MercuryApp) GetPendingFileOffers() []services.FileOffer {
 
 // AcceptFileOffer accepts an incoming file offer and starts receiving.
 func (m *MercuryApp) AcceptFileOffer(offerID string) string {
-	if m.transSvc == nil || m.syncSvc == nil {
+	m.syncMu.Lock()
+	syncSvc, transSvc := m.syncSvc, m.transSvc
+	m.syncMu.Unlock()
+	if syncSvc == nil || transSvc == nil {
 		return ""
 	}
+
 	saveDir := resolvePath(m.GetReceivedFolder())
-	tid, err := m.transSvc.AcceptOffer(offerID, saveDir)
+	tid, err := m.acceptFileOffer(syncSvc, transSvc, offerID, saveDir)
 	if err != nil {
 		log.Printf("[mercury] accept offer: %v", err)
 		return ""
 	}
 	log.Printf("[mercury] accepted offer %s, transfer %s", offerID, tid)
-	// Tell the sender we accepted so they start streaming the file.
-	m.syncSvc.BroadcastFileAccept(offerID)
 	m.notifyChange()
 	return tid
 }

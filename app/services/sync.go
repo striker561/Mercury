@@ -3,10 +3,14 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
+	"net"
+	"strconv"
 
 	"mercury/app/backend/crypto"
 	"mercury/app/backend/sync"
+	"mercury/app/backend/transport"
 
 	goclipboard "golang.design/x/clipboard"
 )
@@ -27,7 +31,7 @@ type wirePayload struct {
 type OnFileOfferCallback func(offerID, fileName string, fileSize int64, peerAddr string)
 
 // OnFileAcceptCallback is called when a remote peer accepts our file offer.
-type OnFileAcceptCallback func(offerID string)
+type OnFileAcceptCallback func(offerID, peerAddr string)
 
 // SyncService manages LAN peer discovery, clipboard broadcast, and receive.
 type SyncService struct {
@@ -42,7 +46,7 @@ type SyncService struct {
 
 // SetOnMessage registers a callback for non-clipboard messages (file chunks)
 // received on the shared TCP listener.
-func (s *SyncService) SetOnMessage(handler func(byte, []byte)) {
+func (s *SyncService) SetOnMessage(handler func(byte, []byte, string)) {
 	s.manager.OnMessage = handler
 }
 
@@ -69,11 +73,17 @@ func (s *SyncService) SetOnFileAccept(cb OnFileAcceptCallback) {
 	s.onFileAccept = cb
 }
 
-// BroadcastFileAccept sends an accept notification for an offer back to peers.
-func (s *SyncService) BroadcastFileAccept(offerID string) {
+// SendFileAccept tells the peer that offered the file to start sending.
+func (s *SyncService) SendFileAccept(peerAddr, offerID string) error {
+	if peerAddr == "" {
+		return fmt.Errorf("file accept: empty peer address")
+	}
 	p := wirePayload{Type: "file_accept", OfferID: offerID}
-	data, _ := json.Marshal(p)
-	s.manager.Broadcast(data)
+	data, err := json.Marshal(p)
+	if err != nil {
+		return err
+	}
+	return s.manager.SendTo(peerAddr, data)
 }
 
 // SetOnResync registers a callback fired after an automatic resync, so the
@@ -127,7 +137,7 @@ func (s *SyncService) startNetworkWatch() {
 // Start begins mDNS discovery, TCP listening, and automatic network-watch
 // retries (resync when interfaces change or no peers are found for a while).
 func (s *SyncService) Start() error {
-	s.manager.SetOnReceive(func(payload []byte) {
+	s.manager.SetOnReceive(func(payload []byte, remoteAddr string) {
 		var p wirePayload
 		if err := json.Unmarshal(payload, &p); err != nil {
 			log.Printf("[sync] unmarshal error: %v", err)
@@ -141,13 +151,12 @@ func (s *SyncService) Start() error {
 		case "file_offer":
 			log.Printf("[sync] received file offer: %s (%d bytes)", p.FileName, p.FileSize)
 			if s.onFileOffer != nil {
-				addr := peerAddrFromPeers(s.manager.GetPeers())
-				s.onFileOffer(p.OfferID, p.FileName, p.FileSize, addr)
+				s.onFileOffer(p.OfferID, p.FileName, p.FileSize, peerAddrFromRemote(remoteAddr))
 			}
 		case "file_accept":
 			log.Printf("[sync] received file accept: %s", p.OfferID)
 			if s.onFileAccept != nil {
-				s.onFileAccept(p.OfferID)
+				s.onFileAccept(p.OfferID, peerAddrFromRemote(remoteAddr))
 			}
 		}
 	})
@@ -226,10 +235,11 @@ func (s *SyncService) GetPeers() []map[string]string {
 	result := make([]map[string]string, len(peers))
 	for i, p := range peers {
 		result[i] = map[string]string{
-			"id":       p.ID,
-			"hostname": p.Hostname,
-			"addr":     p.Addr,
-			"lastSeen": p.LastSeen.Format("15:04:05"),
+			"id":        p.ID,
+			"hostname":  p.Hostname,
+			"addr":      p.Addr,
+			"reachable": strconv.FormatBool(p.Reachable),
+			"lastSeen":  p.LastSeen.Format("15:04:05"),
 		}
 	}
 	return result
@@ -251,11 +261,12 @@ func (s *SyncService) BroadcastFileOffer(offerID, fileName string, fileSize int6
 	s.manager.Broadcast(data)
 }
 
-// peerAddrFromPeers returns the address of the first peer, or "" if empty.
-// Used to determine which peer sent a file offer.
-func peerAddrFromPeers(peers []sync.Peer) string {
-	for _, p := range peers {
-		return p.Addr
+// peerAddrFromRemote converts an observed ephemeral TCP address into the
+// peer's listening address.
+func peerAddrFromRemote(remote string) string {
+	host, _, err := net.SplitHostPort(remote)
+	if err != nil {
+		return remote
 	}
-	return ""
+	return net.JoinHostPort(host, strconv.Itoa(transport.Port))
 }

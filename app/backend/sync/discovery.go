@@ -6,6 +6,8 @@ import (
 	"log"
 	"net"
 	"os"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -149,13 +151,8 @@ func resolveEntry(entry *zeroconf.ServiceEntry) *Peer {
 		entry = resolved
 	}
 
-	// Pick the first IPv4 address, falling back to IPv6.
-	var addrStr string
-	if len(entry.AddrIPv4) > 0 {
-		addrStr = net.JoinHostPort(entry.AddrIPv4[0].String(), fmt.Sprintf("%d", entry.Port))
-	} else if len(entry.AddrIPv6) > 0 {
-		addrStr = net.JoinHostPort(entry.AddrIPv6[0].String(), fmt.Sprintf("%d", entry.Port))
-	} else {
+	addrs := entryAddrs(entry)
+	if len(addrs) == 0 {
 		return nil
 	}
 
@@ -171,8 +168,98 @@ func resolveEntry(entry *zeroconf.ServiceEntry) *Peer {
 	return &Peer{
 		ID:       id,
 		Hostname: entry.Instance,
-		Addr:     addrStr,
+		Addr:     addrs[0],
+		Addrs:    addrs,
 	}
+}
+
+// entryAddrs returns every usable address, best candidate first.  A
+// multi-homed machine advertises addresses for VPN, bridge and LAN
+// interfaces; the first A record is not necessarily reachable.
+func entryAddrs(entry *zeroconf.ServiceEntry) []string {
+	var raw []string
+	for _, ip := range entry.AddrIPv4 {
+		raw = append(raw, net.JoinHostPort(ip.String(), strconv.Itoa(entry.Port)))
+	}
+	for _, ip := range entry.AddrIPv6 {
+		raw = append(raw, net.JoinHostPort(ip.String(), strconv.Itoa(entry.Port)))
+	}
+	return rankAddrs(raw)
+}
+
+func rankAddrs(addrs []string) []string {
+	locals := localNetworks()
+	type scored struct {
+		addr  string
+		score int
+	}
+	out := make([]scored, 0, len(addrs))
+	seen := make(map[string]bool, len(addrs))
+	for _, a := range addrs {
+		if seen[a] {
+			continue
+		}
+		seen[a] = true
+		s := addrScore(a, locals)
+		if s < 0 {
+			continue
+		}
+		out = append(out, scored{addr: a, score: s})
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].score > out[j].score })
+
+	ranked := make([]string, len(out))
+	for i := range out {
+		ranked[i] = out[i].addr
+	}
+	return ranked
+}
+
+// addrScore ranks same-subnet addresses above other private or public ones,
+// and rejects addresses that can never reach a peer.
+func addrScore(addr string, locals []*net.IPNet) int {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return -1
+	}
+	ip := net.ParseIP(host)
+	if ip == nil || ip.IsUnspecified() || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+		return -1
+	}
+	for _, n := range locals {
+		if n.Contains(ip) {
+			return 2
+		}
+	}
+	if ip.IsPrivate() {
+		return 1
+	}
+	return 0
+}
+
+func localNetworks() []*net.IPNet {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+	var out []*net.IPNet
+	for _, ifc := range ifaces {
+		if ifc.Flags&net.FlagUp == 0 || ifc.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, _ := ifc.Addrs()
+		for _, a := range addrs {
+			n, ok := a.(*net.IPNet)
+			if !ok {
+				continue
+			}
+			if n.IP.IsLoopback() || n.IP.IsLinkLocalUnicast() {
+				continue
+			}
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // resolveInstance performs a full mDNS resolution for a specific service

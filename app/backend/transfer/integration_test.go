@@ -37,7 +37,7 @@ func startTestListener(t *testing.T, recvMgr *Manager, key []byte) *testListener
 	}
 
 	go func() {
-		_ = transport.Serve(ctx, ln, func(msgType byte, payload []byte) {
+		_ = transport.Serve(ctx, ln, func(msgType byte, payload []byte, _ string) {
 			dec, err := crypto.Decrypt(payload, key)
 			if err != nil {
 				return

@@ -23,6 +23,8 @@ type Peer struct {
 	ID        string    `json:"id"`
 	Hostname  string    `json:"hostname"`
 	Addr      string    `json:"addr"`
+	Addrs     []string  `json:"addrs,omitempty"`
+	Reachable bool      `json:"reachable"`
 	LastSeen  time.Time `json:"lastSeen"`
 	failCount int       // consecutive TCP failures (internal, not exported)
 }
@@ -62,8 +64,19 @@ func (pm *PeerMap) addOrUpdate(p *Peer) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
+	if len(p.Addrs) == 0 && p.Addr != "" {
+		p.Addrs = []string{p.Addr}
+	}
+
 	if existing, ok := pm.peers[p.ID]; ok {
-		existing.Addr = p.Addr
+		if len(p.Addrs) > 0 {
+			existing.Addrs = p.Addrs
+			if !containsAddr(p.Addrs, existing.Addr) {
+				existing.Addr = p.Addrs[0]
+			}
+		} else if p.Addr != "" {
+			existing.Addr = p.Addr
+		}
 		existing.Hostname = p.Hostname
 		existing.LastSeen = time.Now()
 		existing.failCount = 0 // fresh announcement = alive
@@ -72,6 +85,15 @@ func (pm *PeerMap) addOrUpdate(p *Peer) {
 
 	p.LastSeen = time.Now()
 	pm.peers[p.ID] = p
+}
+
+func containsAddr(addrs []string, addr string) bool {
+	for _, a := range addrs {
+		if a == addr {
+			return true
+		}
+	}
+	return false
 }
 
 // RecordFailure increments a peer's failure counter.  Returns true when
@@ -84,6 +106,7 @@ func (pm *PeerMap) RecordFailure(id string) bool {
 	if !ok {
 		return false
 	}
+	p.Reachable = false
 	p.failCount++
 	if p.failCount >= maxFailCount {
 		delete(pm.peers, id)
@@ -98,6 +121,21 @@ func (pm *PeerMap) ResetFailures(id string) {
 	defer pm.mu.Unlock()
 
 	if p, ok := pm.peers[id]; ok {
+		p.failCount = 0
+	}
+}
+
+// MarkReachable records a successful probe and the address that worked.
+func (pm *PeerMap) MarkReachable(id, addr string) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	if p, ok := pm.peers[id]; ok {
+		if addr != "" {
+			p.Addr = addr
+		}
+		p.Reachable = true
+		p.LastSeen = time.Now()
 		p.failCount = 0
 	}
 }

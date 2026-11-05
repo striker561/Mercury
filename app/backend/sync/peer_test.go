@@ -199,3 +199,24 @@ func TestPeerMapDistinctMachinesNotMerged(t *testing.T) {
 		t.Fatalf("expected 2 distinct peers, got %d", pm.Len())
 	}
 }
+
+func TestPeerMapMarkReachableUsesWorkingAddress(t *testing.T) {
+	pm := NewPeerMap()
+	defer pm.Stop()
+
+	pm.AddOrUpdatePeer(Peer{
+		ID:    "peer1",
+		Addr:  "192.168.1.10:47821",
+		Addrs: []string{"192.168.1.10:47821", "10.8.0.5:47821"},
+	})
+	pm.RecordFailure("peer1")
+	pm.MarkReachable("peer1", "10.8.0.5:47821")
+
+	p := pm.GetPeers()[0]
+	if !p.Reachable {
+		t.Fatal("peer should be reachable after a successful probe")
+	}
+	if p.Addr != "10.8.0.5:47821" {
+		t.Fatalf("Addr = %q, want the address that worked", p.Addr)
+	}
+}

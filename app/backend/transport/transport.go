@@ -31,8 +31,9 @@ const (
 	SendTimeout = 5 * time.Second
 )
 
-// OnMessage is called for every received message.
-type OnMessage func(msgType byte, payload []byte)
+// OnMessage is called for every received message. remoteAddr is the
+// observed TCP peer (host:ephemeral), not the peer's listening address.
+type OnMessage func(msgType byte, payload []byte, remoteAddr string)
 
 // Send sends a clipboard payload (MsgClipboard).
 func Send(ctx context.Context, addr string, payload []byte) error {
@@ -172,6 +173,6 @@ func handleConn(conn net.Conn, handler OnMessage) {
 			return
 		}
 
-		handler(msgType, payload)
+		handler(msgType, payload, conn.RemoteAddr().String())
 	}
 }
