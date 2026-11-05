@@ -6,6 +6,19 @@ import (
 	"testing"
 )
 
+func TestBindRejectsSecondListener(t *testing.T) {
+	ln, err := Bind(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+
+	port := ln.Addr().(*net.TCPAddr).Port
+	if _, err := Bind(port); err == nil {
+		t.Fatal("expected the second Bind to fail with address already in use")
+	}
+}
+
 func TestWriteFrameMultipleOnConnection(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

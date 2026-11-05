@@ -53,7 +53,7 @@ func TestNetworkWatcherResyncsOnInterfaceChange(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		w.Start(ctx, func() int { return 1 }, func() { resyncs.Add(1) })
+		w.Start(ctx, func() int { return 1 }, func() bool { resyncs.Add(1); return true })
 	}()
 
 	// Let the watcher take its first reading, then switch networks.
@@ -78,7 +78,7 @@ func TestNetworkWatcherRetriesWhenNoPeers(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		w.Start(ctx, func() int { return 0 }, func() { resyncs.Add(1) })
+		w.Start(ctx, func() int { return 0 }, func() bool { resyncs.Add(1); return true })
 	}()
 
 	// Zero peers for longer than noPeerTimeout must trigger a retry.
@@ -100,7 +100,7 @@ func TestNetworkWatcherNoResyncWithPeers(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		w.Start(ctx, func() int { return 2 }, func() { resyncs.Add(1) })
+		w.Start(ctx, func() int { return 2 }, func() bool { resyncs.Add(1); return true })
 	}()
 
 	// Well past the no-peer timeout, but peers exist — no resync expected.
@@ -123,7 +123,7 @@ func TestNetworkWatcherStopsOnCancel(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		w.Start(ctx, func() int { return 0 }, func() {})
+		w.Start(ctx, func() int { return 0 }, func() bool { return true })
 	}()
 
 	cancel()
@@ -131,5 +131,49 @@ func TestNetworkWatcherStopsOnCancel(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("watcher did not stop on cancel")
+	}
+}
+
+// A resync skipped because a transfer is active must not consume the
+// interface change; the next tick has to retry it.
+func TestNetworkWatcherRetriesSkippedResync(t *testing.T) {
+	net1 := []net.Interface{iface("eth0", 1500)}
+	net2 := []net.Interface{iface("wlan0", 1400)}
+
+	var current atomic.Value
+	current.Store(net1)
+	w := NewNetworkWatcher()
+	w.pollInterval = 10 * time.Millisecond
+	w.noPeerTimeout = time.Hour
+	w.listIfaces = func() ([]net.Interface, error) {
+		return current.Load().([]net.Interface), nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var attempts atomic.Int32
+	var ran atomic.Int32
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		w.Start(ctx, func() int { return 1 }, func() bool {
+			if attempts.Add(1) < 3 {
+				return false
+			}
+			ran.Add(1)
+			return true
+		})
+	}()
+
+	time.Sleep(30 * time.Millisecond)
+	current.Store(net2)
+
+	waitFor(t, 2*time.Second, func() bool { return ran.Load() == 1 })
+	cancel()
+	<-done
+
+	if attempts.Load() < 3 {
+		t.Fatalf("expected repeated attempts, got %d", attempts.Load())
 	}
 }

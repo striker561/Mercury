@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/grandcat/zeroconf"
@@ -44,10 +45,10 @@ func peerIDFromEntry(entry *zeroconf.ServiceEntry) string {
 }
 
 // Announce registers this Mercury instance on the LAN via mDNS so other
-// instances can discover it.  The server shuts down automatically when
-// ctx is cancelled.  deviceID is advertised in the TXT record so peers can
-// dedup us across hostname changes (dual-boot).
-func Announce(ctx context.Context, port int, instance, deviceID string) error {
+// instances can discover it.  deviceID is advertised in the TXT record so
+// peers can dedup us across hostname changes (dual-boot).  The returned stop
+// function shuts the registration down and is safe to call more than once.
+func Announce(ctx context.Context, port int, instance, deviceID string) (func(), error) {
 	if instance == "" {
 		instance = hostname()
 	}
@@ -67,15 +68,20 @@ func Announce(ctx context.Context, port int, instance, deviceID string) error {
 		nil,         // all interfaces
 	)
 	if err != nil {
-		return fmt.Errorf("sync mDNS announce: %w", err)
+		return nil, fmt.Errorf("sync mDNS announce: %w", err)
+	}
+
+	var once sync.Once
+	stop := func() {
+		once.Do(server.Shutdown)
 	}
 
 	go func() {
 		<-ctx.Done()
-		server.Shutdown()
+		stop()
 	}()
 
-	return nil
+	return stop, nil
 }
 
 // Browse discovers other Mercury instances on the LAN.  It sends discovered

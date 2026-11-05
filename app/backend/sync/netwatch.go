@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+const maxNoPeerBackoff = 60 * time.Second
+
 // NetworkWatcher monitors the local network and triggers discovery resyncs.
 //
 // Why this exists: mDNS discovery (grandcat/zeroconf) snapshots the multicast
@@ -62,10 +64,13 @@ func (w *NetworkWatcher) interfaceFingerprint() string {
 // Start runs the watch loop until ctx is cancelled.  peerCount reports the
 // current number of known peers; resync is called when the network fingerprint
 // changes or when there have been no peers for noPeerTimeout (a first-launch
-// retry).
-func (w *NetworkWatcher) Start(ctx context.Context, peerCount func() int, resync func()) {
+// retry).  resync reports whether it actually ran; a skipped resync is
+// retried on the next tick.
+func (w *NetworkWatcher) Start(ctx context.Context, peerCount func() int, resync func() bool) {
 	last := w.interfaceFingerprint()
 	var emptySince time.Time
+	var nextRetry time.Time
+	retryDelay := w.noPeerTimeout
 
 	ticker := time.NewTicker(w.pollInterval)
 	defer ticker.Stop()
@@ -77,24 +82,34 @@ func (w *NetworkWatcher) Start(ctx context.Context, peerCount func() int, resync
 		case <-ticker.C:
 			cur := w.interfaceFingerprint()
 			if cur != last {
+				if !resync() {
+					continue
+				}
 				last = cur
 				emptySince = time.Time{}
-				resync()
+				nextRetry = time.Time{}
+				retryDelay = w.noPeerTimeout
 				continue
 			}
 
 			if peerCount() == 0 {
 				if emptySince.IsZero() {
 					emptySince = time.Now()
-				} else if time.Since(emptySince) >= w.noPeerTimeout {
-					// Still nothing after the timeout — restart discovery.
-					// Reset the timer so a persistent failure keeps retrying
-					// at the timeout cadence instead of spinning hot.
-					emptySince = time.Now()
-					resync()
+					nextRetry = emptySince.Add(retryDelay)
+				} else if !time.Now().Before(nextRetry) {
+					if resync() {
+						emptySince = time.Now()
+						retryDelay *= 2
+						if retryDelay > maxNoPeerBackoff {
+							retryDelay = maxNoPeerBackoff
+						}
+					}
+					nextRetry = time.Now().Add(retryDelay)
 				}
 			} else {
 				emptySince = time.Time{}
+				nextRetry = time.Time{}
+				retryDelay = w.noPeerTimeout
 			}
 		}
 	}

@@ -127,6 +127,13 @@ func (pm *PeerMap) Remove(id string) {
 	delete(pm.peers, id)
 }
 
+// Clear drops every known peer.
+func (pm *PeerMap) Clear() {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	pm.peers = make(map[string]*Peer)
+}
+
 // Len returns the number of currently known peers.
 func (pm *PeerMap) Len() int {
 	pm.mu.RLock()
