@@ -8,7 +8,15 @@ import (
 	"time"
 )
 
-const maxNoPeerBackoff = 60 * time.Second
+const maxNoPeerBackoff = 30 * time.Second
+
+var noPeerBackoff = []time.Duration{
+	1 * time.Second,
+	2 * time.Second,
+	5 * time.Second,
+	15 * time.Second,
+	maxNoPeerBackoff,
+}
 
 // NetworkWatcher monitors the local network and triggers discovery resyncs.
 //
@@ -32,7 +40,7 @@ type NetworkWatcher struct {
 func NewNetworkWatcher() *NetworkWatcher {
 	return &NetworkWatcher{
 		pollInterval:  3 * time.Second,
-		noPeerTimeout: 15 * time.Second,
+		noPeerTimeout: noPeerBackoff[0],
 		listIfaces:    net.Interfaces,
 	}
 }
@@ -71,6 +79,7 @@ func (w *NetworkWatcher) Start(ctx context.Context, peerCount func() int, resync
 	var emptySince time.Time
 	var nextRetry time.Time
 	retryDelay := w.noPeerTimeout
+	retryStep := 0
 
 	ticker := time.NewTicker(w.pollInterval)
 	defer ticker.Stop()
@@ -89,6 +98,7 @@ func (w *NetworkWatcher) Start(ctx context.Context, peerCount func() int, resync
 				emptySince = time.Time{}
 				nextRetry = time.Time{}
 				retryDelay = w.noPeerTimeout
+				retryStep = 0
 				continue
 			}
 
@@ -99,10 +109,10 @@ func (w *NetworkWatcher) Start(ctx context.Context, peerCount func() int, resync
 				} else if !time.Now().Before(nextRetry) {
 					if resync() {
 						emptySince = time.Now()
-						retryDelay *= 2
-						if retryDelay > maxNoPeerBackoff {
-							retryDelay = maxNoPeerBackoff
+						if retryStep < len(noPeerBackoff)-1 {
+							retryStep++
 						}
+						retryDelay = noPeerBackoff[retryStep]
 					}
 					nextRetry = time.Now().Add(retryDelay)
 				}
@@ -110,6 +120,7 @@ func (w *NetworkWatcher) Start(ctx context.Context, peerCount func() int, resync
 				emptySince = time.Time{}
 				nextRetry = time.Time{}
 				retryDelay = w.noPeerTimeout
+				retryStep = 0
 			}
 		}
 	}
