@@ -2,6 +2,8 @@ package system
 
 import (
 	"context"
+	"log"
+	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -48,7 +50,13 @@ func BuildMenu(app *application.App, showFn func()) (*application.Menu, *MenuRef
 	// Check for updates
 	checkItem := menu.Add("Check for Updates…")
 	checkItem.OnClick(func(ctx *application.Context) {
-		go app.Updater.CheckAndInstall(context.Background())
+		go func() {
+			checkCtx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+			defer cancel()
+			if err := app.Updater.CheckAndInstall(checkCtx); err != nil {
+				log.Printf("[mercury] update install: %v", err)
+			}
+		}()
 	})
 
 	menu.AddSeparator()

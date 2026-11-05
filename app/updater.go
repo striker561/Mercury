@@ -1,7 +1,10 @@
 package app
 
 import (
+	"context"
 	"fmt"
+	"log"
+	"net/http"
 	"strings"
 	"time"
 
@@ -56,6 +59,7 @@ func configureUpdater(app *application.App) error {
 		Repository:    githubRepository,
 		ChecksumAsset: checksumAsset,
 		AssetMatcher:  mercuryAssetMatcher,
+		HTTPClient:    &http.Client{Timeout: 10 * time.Minute},
 	})
 	if err != nil {
 		return fmt.Errorf("updater provider: %w", err)
@@ -70,8 +74,16 @@ func configureUpdater(app *application.App) error {
 func startSilentUpdateCheck(app *application.App, notify func(title, body string)) {
 	go func() {
 		time.Sleep(10 * time.Minute)
-		rel, err := app.Updater.Check(app.Context())
-		if err != nil || rel == nil {
+
+		ctx, cancel := context.WithTimeout(app.Context(), 20*time.Second)
+		defer cancel()
+
+		rel, err := app.Updater.Check(ctx)
+		if err != nil {
+			log.Printf("[mercury] update check: %v", err)
+			return
+		}
+		if rel == nil {
 			return
 		}
 		if notify != nil {
