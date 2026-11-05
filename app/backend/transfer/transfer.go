@@ -295,6 +295,19 @@ func (m *Manager) Progress(tid string) *Progress {
 	return &cp
 }
 
+// HasActiveTransfers reports whether a send, receive or accept is in flight.
+func (m *Manager) HasActiveTransfers() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, p := range m.transfers {
+		switch p.Status {
+		case StatusAccepting, StatusSending, StatusReceiving:
+			return true
+		}
+	}
+	return false
+}
+
 // AllProgress returns progress for active transfers (omits completed), sorted
 // by arrival time (oldest first) with ID as a deterministic tie-break.  Same
 // reasoning as PendingOffers: stable order across UI re-fetches.

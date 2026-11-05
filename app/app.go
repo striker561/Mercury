@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"mercury/app/backend/clipboard"
@@ -21,6 +23,7 @@ import (
 
 // MercuryApp is the main application struct exposed to the Wails frontend.
 type MercuryApp struct {
+	syncMu     sync.Mutex
 	syncSvc    *services.SyncService
 	clipSvc    *services.ClipboardService
 	db         *storage.DB
@@ -30,8 +33,8 @@ type MercuryApp struct {
 	emitChange func()
 	notifySvc  *notifications.NotificationService
 	autostart  *application.AutostartManager
-	syncAt     time.Time // last clipboard sync activity
-	gnomeTray  bool      // GNOME detected — tray may need AppIndicator
+	syncAt     atomic.Int64 // unix nanos of the last clipboard sync
+	gnomeTray  bool         // GNOME detected — tray may need AppIndicator
 }
 
 // SetShowWindow registers a callback to show the settings window.
@@ -100,17 +103,32 @@ func (m *MercuryApp) GetVersion() string {
 	return Version
 }
 
-// SetPassphrase saves the passphrase and starts syncing.
+// SetPassphrase saves the passphrase and starts syncing.  Re-saving the same
+// passphrase leaves a healthy session alone.
 func (m *MercuryApp) SetPassphrase(passphrase string) {
+	m.syncMu.Lock()
+	defer m.syncMu.Unlock()
+
+	unchanged := m.db != nil && passphrase != "" && m.db.GetPassphrase() == passphrase
 	if m.db != nil {
 		m.db.SetPassphrase(passphrase)
 	}
-	m.startSync(passphrase)
+	if unchanged && m.syncSvc != nil && m.syncSvc.Running() && m.syncSvc.LastError() == "" {
+		m.notifyChange()
+		return
+	}
+	m.startSyncLocked(passphrase)
 	m.notifyChange()
 }
 
 // startSync initializes clipboard and begins syncing.
 func (m *MercuryApp) startSync(passphrase string) {
+	m.syncMu.Lock()
+	defer m.syncMu.Unlock()
+	m.startSyncLocked(passphrase)
+}
+
+func (m *MercuryApp) startSyncLocked(passphrase string) {
 	log.Printf("[mercury] starting sync")
 
 	if err := goclipboard.Init(); err != nil {
@@ -175,11 +193,6 @@ func (m *MercuryApp) startSync(passphrase string) {
 		}
 	})
 
-	if err := m.syncSvc.Start(); err != nil {
-		log.Printf("[mercury] sync start error: %v", err)
-		return
-	}
-
 	// Automatic resync on network change / no-peers.  Refresh the UI after a
 	// resync, but never restart the shared listener mid-transfer (that would
 	// drop the in-flight file stream) — the watcher retries on its next poll.
@@ -187,8 +200,14 @@ func (m *MercuryApp) startSync(passphrase string) {
 		m.notifyChange()
 	})
 	m.syncSvc.SetResyncAllowed(func() bool {
-		return m.transSvc == nil || len(m.transSvc.AllProgress()) == 0
+		return m.transSvc == nil || !m.transSvc.HasActiveTransfers()
 	})
+
+	if err := m.syncSvc.Start(); err != nil {
+		log.Printf("[mercury] sync start error: %v", err)
+		m.notifyChange()
+		return
+	}
 
 	m.syncClipboardWatch()
 }
@@ -216,6 +235,12 @@ func (m *MercuryApp) syncClipboardWatch() {
 }
 
 func (m *MercuryApp) startClipboardWatcher() {
+	syncSvc := m.syncSvc
+	transSvc := m.transSvc
+	if syncSvc == nil || transSvc == nil {
+		return
+	}
+
 	m.clipSvc = services.NewClipboardService()
 	m.clipSvc.Start(func(c clipboard.Change) {
 		if m.db != nil && m.db.IsPaused() {
@@ -225,16 +250,16 @@ func (m *MercuryApp) startClipboardWatcher() {
 		case clipboard.ChangeText:
 			if fi := fileinfo.Detect(c.Text); fi != nil {
 				log.Printf("[mercury] detected file: %s (%d bytes, %s)", fi.Name, fi.Size, fi.Category)
-				id := m.transSvc.NewOfferID()
-				m.transSvc.StoreOutgoing(id, fi.Path)
-				m.syncSvc.BroadcastFileOffer(id, fi.Name, fi.Size)
+				id := transSvc.NewOfferID()
+				transSvc.StoreOutgoing(id, fi.Path)
+				syncSvc.BroadcastFileOffer(id, fi.Name, fi.Size)
 				m.MarkSyncActivity()
 				return
 			}
-			m.syncSvc.BroadcastText(c.Text)
+			syncSvc.BroadcastText(c.Text)
 			m.MarkSyncActivity()
 		case clipboard.ChangeImage:
-			m.syncSvc.BroadcastImage(c.Image)
+			syncSvc.BroadcastImage(c.Image)
 			m.MarkSyncActivity()
 		}
 	})
@@ -402,12 +427,13 @@ func resolvePath(p string) string {
 
 // MarkSyncActivity records that we just sent clipboard data to peers.
 func (m *MercuryApp) MarkSyncActivity() {
-	m.syncAt = time.Now()
+	m.syncAt.Store(time.Now().UnixNano())
 }
 
 // HasRecentSync returns true if clipboard was synced within the last 2 seconds.
 func (m *MercuryApp) HasRecentSync() bool {
-	return time.Since(m.syncAt) < 2*time.Second
+	last := m.syncAt.Load()
+	return last != 0 && time.Since(time.Unix(0, last)) < 2*time.Second
 }
 
 // trayActive returns true when the tray icon should show the active state.

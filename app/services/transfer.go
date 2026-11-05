@@ -81,6 +81,11 @@ func (s *TransferService) AllProgress() []FileProgress {
 	return s.mgr.AllProgress()
 }
 
+// HasActiveTransfers reports whether a send or receive is in flight.
+func (s *TransferService) HasActiveTransfers() bool {
+	return s.mgr.HasActiveTransfers()
+}
+
 // CancelTransfer signals a running transfer to stop.
 func (s *TransferService) CancelTransfer(tid string) {
 	s.mgr.CancelTransfer(tid)

@@ -37,6 +37,7 @@ type SyncService struct {
 	onResync      func()
 	resyncAllowed func() bool
 	watchCancel   context.CancelFunc
+	watchDone     chan struct{}
 }
 
 // SetOnMessage registers a callback for non-clipboard messages (file chunks)
@@ -103,18 +104,24 @@ func (s *SyncService) startNetworkWatch() {
 	ctx, cancel := context.WithCancel(context.Background())
 	s.watchCancel = cancel
 	w := sync.NewNetworkWatcher()
-	go w.Start(ctx, func() int { return s.manager.PeerCount() }, func() {
-		if s.resyncAllowed != nil && !s.resyncAllowed() {
-			return
-		}
-		if err := s.manager.Resync(); err != nil {
-			log.Printf("[sync] resync: %v", err)
-			return
-		}
-		if s.onResync != nil {
-			s.onResync()
-		}
-	})
+	done := make(chan struct{})
+	s.watchDone = done
+	go func() {
+		defer close(done)
+		w.Start(ctx, func() int { return s.manager.PeerCount() }, func() bool {
+			if s.resyncAllowed != nil && !s.resyncAllowed() {
+				return false
+			}
+			if err := s.manager.Resync(); err != nil {
+				log.Printf("[sync] resync: %v", err)
+				return false
+			}
+			if s.onResync != nil {
+				s.onResync()
+			}
+			return true
+		})
+	}()
 }
 
 // Start begins mDNS discovery, TCP listening, and automatic network-watch
@@ -158,6 +165,10 @@ func (s *SyncService) Stop() {
 		s.watchCancel()
 		s.watchCancel = nil
 	}
+	if s.watchDone != nil {
+		<-s.watchDone
+		s.watchDone = nil
+	}
 	s.manager.Stop()
 }
 
@@ -189,6 +200,19 @@ func (s *SyncService) DecryptFailCount() int {
 		return 0
 	}
 	return s.manager.DecryptFailCount()
+}
+
+// Running reports whether the listener and discovery are up.
+func (s *SyncService) Running() bool {
+	return s.manager != nil && s.manager.Running()
+}
+
+// LastError returns the last lifecycle error, or "" when healthy.
+func (s *SyncService) LastError() string {
+	if s.manager == nil {
+		return ""
+	}
+	return s.manager.LastError()
 }
 
 // PeerCount returns the number of connected peers.
