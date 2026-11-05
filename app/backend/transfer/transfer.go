@@ -29,8 +29,13 @@ import (
 )
 
 const (
-	chunkSize   = 256 * 1024 // 256 KiB per chunk
-	dialTimeout = 5 * time.Second
+	chunkSize    = 256 * 1024 // 256 KiB per chunk
+	dialTimeout  = 5 * time.Second
+	writeTimeout = 30 * time.Second
+
+	maxTerminalTransfers = 50
+	maxOutgoingOffers    = 50
+	outgoingOfferTTL     = 10 * time.Minute
 )
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -56,6 +61,17 @@ const (
 	StatusFailed    Status = "failed"
 )
 
+type outgoingOffer struct {
+	path string
+	at   time.Time
+}
+
+type receiveStream struct {
+	chunks chan []byte
+	end    chan struct{}
+	done   chan struct{}
+}
+
 // Progress contains live transfer state for the frontend.
 type Progress struct {
 	ID        string    `json:"id"`
@@ -64,6 +80,7 @@ type Progress struct {
 	Received  int64     `json:"received"`
 	Speed     int64     `json:"speed"` // bytes/sec, 0 when idle
 	Status    Status    `json:"status"`
+	Error     string    `json:"error,omitempty"`
 	CreatedAt time.Time `json:"created_at"` // arrival order — used to stabilise the UI list
 }
 
@@ -73,13 +90,13 @@ type Progress struct {
 type Manager struct {
 	key       []byte
 	mu        sync.Mutex
-	offers    map[string]*Offer // incoming offers (from network)
-	outgoing  map[string]string // our offers: offerID → filePath
+	offers    map[string]*Offer        // incoming offers (from network)
+	outgoing  map[string]outgoingOffer // our offers: offerID → file path + time
 	transfers map[string]*Progress
 	cancel    map[string]chan struct{} // tid → close to cancel
 	nextID    atomic.Int64
 
-	receiveCh map[string]chan []byte // offer ID → decrypted chunks for active receives
+	receiveCh map[string]*receiveStream // offer ID → active receive
 
 	// OnOffer is called when a file offer arrives from the network.
 	OnOffer func(o Offer)
@@ -93,10 +110,10 @@ func NewManager(key []byte) *Manager {
 	return &Manager{
 		key:       key,
 		offers:    make(map[string]*Offer),
-		outgoing:  make(map[string]string),
+		outgoing:  make(map[string]outgoingOffer),
 		transfers: make(map[string]*Progress),
 		cancel:    make(map[string]chan struct{}),
-		receiveCh: make(map[string]chan []byte),
+		receiveCh: make(map[string]*receiveStream),
 	}
 }
 
@@ -114,17 +131,16 @@ func (m *Manager) OnWireMessage(msgType byte, payload []byte) {
 		chunk := payload[offerIDLen:]
 
 		m.mu.Lock()
-		ch := m.receiveCh[offerID]
+		stream := m.receiveCh[offerID]
 		m.mu.Unlock()
-		if ch == nil {
-			log.Printf("[transfer] chunk for unknown offer %s", offerID)
+		if stream == nil {
 			return
 		}
 
+		// Blocking send is backpressure: the TCP reader waits for the disk.
 		select {
-		case ch <- chunk:
-		default:
-			log.Printf("[transfer] dropped chunk (channel full) for offer %s", offerID)
+		case stream.chunks <- chunk:
+		case <-stream.done:
 		}
 
 	case transport.MsgFileEnd:
@@ -135,13 +151,13 @@ func (m *Manager) OnWireMessage(msgType byte, payload []byte) {
 		offerID := string(payload)
 
 		m.mu.Lock()
-		ch := m.receiveCh[offerID]
+		stream := m.receiveCh[offerID]
 		delete(m.receiveCh, offerID)
 		m.mu.Unlock()
-		if ch == nil {
+		if stream == nil {
 			return
 		}
-		close(ch)
+		close(stream.end)
 	}
 }
 
@@ -200,6 +216,16 @@ func (m *Manager) PendingOffers() []Offer {
 	return out
 }
 
+// OfferPeer returns the address that sent a pending offer.
+func (m *Manager) OfferPeer(offerID string) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if o, ok := m.offers[offerID]; ok {
+		return o.PeerAddr
+	}
+	return ""
+}
+
 // AcceptOffer starts receiving the accepted file. Returns a transfer ID.
 func (m *Manager) AcceptOffer(offerID, saveDir string) (string, error) {
 	m.mu.Lock()
@@ -215,14 +241,19 @@ func (m *Manager) AcceptOffer(offerID, saveDir string) (string, error) {
 	p := &Progress{ID: tid, FileName: o.FileName, FileSize: o.FileSize, Status: StatusAccepting, CreatedAt: time.Now()}
 	m.mu.Lock()
 	m.transfers[tid] = p
+	m.pruneTerminalLocked()
 	m.mu.Unlock()
 
-	ch := make(chan []byte, 20)
+	stream := &receiveStream{
+		chunks: make(chan []byte, 20),
+		end:    make(chan struct{}),
+		done:   make(chan struct{}),
+	}
 	m.mu.Lock()
-	m.receiveCh[offerID] = ch
+	m.receiveCh[offerID] = stream
 	m.mu.Unlock()
 
-	go m.receiveFile(tid, offerID, o, saveDir, ch)
+	go m.receiveFile(tid, offerID, o, saveDir, stream)
 	return tid, nil
 }
 
@@ -237,17 +268,66 @@ func (m *Manager) RejectOffer(offerID string) {
 // StoreOutgoing remembers an offer we broadcast so we can send the file when accepted.
 func (m *Manager) StoreOutgoing(offerID, filePath string) {
 	m.mu.Lock()
-	m.outgoing[offerID] = filePath
+	m.outgoing[offerID] = outgoingOffer{path: filePath, at: time.Now()}
+	m.pruneOutgoingLocked()
 	m.mu.Unlock()
 }
 
 // AcceptNotification is called when a remote peer accepts one of our offers.
 func (m *Manager) AcceptNotification(offerID string) string {
 	m.mu.Lock()
-	fp := m.outgoing[offerID]
+	o, ok := m.outgoing[offerID]
 	delete(m.outgoing, offerID)
 	m.mu.Unlock()
-	return fp
+	if !ok {
+		return ""
+	}
+	return o.path
+}
+
+func (m *Manager) pruneTerminalLocked() {
+	var terminal []*Progress
+	for _, p := range m.transfers {
+		if p.Status == StatusDone || p.Status == StatusFailed {
+			terminal = append(terminal, p)
+		}
+	}
+	if len(terminal) <= maxTerminalTransfers {
+		return
+	}
+	sort.Slice(terminal, func(i, j int) bool {
+		return terminal[i].CreatedAt.Before(terminal[j].CreatedAt)
+	})
+	for _, p := range terminal[:len(terminal)-maxTerminalTransfers] {
+		delete(m.transfers, p.ID)
+	}
+}
+
+func (m *Manager) pruneOutgoingLocked() {
+	cutoff := time.Now().Add(-outgoingOfferTTL)
+	for id, o := range m.outgoing {
+		if o.at.Before(cutoff) {
+			delete(m.outgoing, id)
+		}
+	}
+	if len(m.outgoing) <= maxOutgoingOffers {
+		return
+	}
+
+	type entry struct {
+		id string
+		at time.Time
+	}
+	entries := make([]entry, 0, len(m.outgoing))
+	for id, o := range m.outgoing {
+		entries = append(entries, entry{id: id, at: o.at})
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].at.Before(entries[j].at)
+	})
+	for _, e := range entries[:len(entries)-maxOutgoingOffers] {
+		delete(m.outgoing, e.id)
+	}
 }
 
 // SendFile sends a file to a peer. Returns a transfer ID.
@@ -260,6 +340,7 @@ func (m *Manager) SendFile(peerAddr, filePath string) (string, error) {
 	p := &Progress{ID: tid, FileName: filepath.Base(filePath), FileSize: fi.Size(), Status: StatusSending, CreatedAt: time.Now()}
 	m.mu.Lock()
 	m.transfers[tid] = p
+	m.pruneTerminalLocked()
 	m.mu.Unlock()
 
 	offerID := m.NewOfferID()
@@ -277,6 +358,7 @@ func (m *Manager) SendFileForOffer(offerID, peerAddr, filePath string) (string, 
 	p := &Progress{ID: tid, FileName: filepath.Base(filePath), FileSize: fi.Size(), Status: StatusSending, CreatedAt: time.Now()}
 	m.mu.Lock()
 	m.transfers[tid] = p
+	m.pruneTerminalLocked()
 	m.mu.Unlock()
 
 	go m.sendFile(tid, offerID, peerAddr, filePath, fi.Size())
@@ -293,6 +375,19 @@ func (m *Manager) Progress(tid string) *Progress {
 	}
 	cp := *p
 	return &cp
+}
+
+// HasActiveTransfers reports whether a send, receive or accept is in flight.
+func (m *Manager) HasActiveTransfers() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, p := range m.transfers {
+		switch p.Status {
+		case StatusAccepting, StatusSending, StatusReceiving:
+			return true
+		}
+	}
+	return false
 }
 
 // AllProgress returns progress for active transfers (omits completed), sorted
@@ -322,10 +417,23 @@ func (m *Manager) AllProgress() []Progress {
 func (m *Manager) CancelTransfer(tid string) {
 	m.mu.Lock()
 	c, ok := m.cancel[tid]
+	if ok {
+		delete(m.cancel, tid)
+	}
 	m.mu.Unlock()
 	if ok {
 		close(c)
 	}
+}
+
+// DismissTransfer removes a finished transfer from the dashboard. Active
+// transfers are left alone; cancel them first.
+func (m *Manager) DismissTransfer(tid string) {
+	m.mu.Lock()
+	if p, ok := m.transfers[tid]; ok && (p.Status == StatusDone || p.Status == StatusFailed) {
+		delete(m.transfers, tid)
+	}
+	m.mu.Unlock()
 }
 
 // updateStatus is a helper used by sendFile / receiveFile.
@@ -334,6 +442,16 @@ func (m *Manager) updateStatus(tid string, s Status, received int64) {
 	if p, ok := m.transfers[tid]; ok {
 		p.Status = s
 		p.Received = received
+	}
+	m.mu.Unlock()
+}
+
+func (m *Manager) fail(tid, reason string) {
+	m.mu.Lock()
+	if p, ok := m.transfers[tid]; ok {
+		p.Status = StatusFailed
+		p.Speed = 0
+		p.Error = reason
 	}
 	m.mu.Unlock()
 }

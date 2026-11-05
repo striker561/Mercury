@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Check, Eye, EyeSlash } from "@phosphor-icons/react";
+import { Eye, EyeSlash } from "@phosphor-icons/react";
 import { MercuryApp } from "../../bindings/mercury/app";
 import { copy } from "../copy";
 import type { AppSettings } from "../types/mercury";
@@ -20,13 +20,15 @@ export default function Settings({
   const [auto, setAuto] = useState(false);
   const [startup, setStartup] = useState(false);
   const [folder, setFolder] = useState("~/Downloads/Mercury/");
-  const [saved, setSaved] = useState(false);
+  const [savedPass, setSavedPass] = useState("");
+  const [saveError, setSaveError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     MercuryApp.GetAllSettings().then((s: AppSettings | null) => {
       if (!s) return;
       setPass(s.passphrase ?? "");
+      setSavedPass(s.passphrase ?? "");
       setPaused(s.paused === "true");
       setAccept(s.allow_files !== "false");
       setStartup(s.autostart === "true");
@@ -41,12 +43,24 @@ export default function Settings({
     }
   }, [focusPassphrase]);
 
-  const save = async () => {
-    await MercuryApp.SetPassphrase(pass);
-    setSaved(true);
+  const persist = useCallback(async (): Promise<boolean> => {
+    const value = pass.trim();
+    if (!value) {
+      setSaveError(copy.settings.passphraseRequired);
+      return false;
+    }
+    setSaveError("");
+    await MercuryApp.SetPassphrase(value);
+    const state = await MercuryApp.GetDashboardState();
+    if (state?.syncError) {
+      setSaveError(state.syncError);
+      return false;
+    }
+    setPass(value);
+    setSavedPass(value);
     onPassphraseSaved?.();
-    setTimeout(() => setSaved(false), 2000);
-  };
+    return true;
+  }, [pass, onPassphraseSaved]);
 
   const toggle = (k: string, v: boolean, fn: (x: boolean) => void) => {
     fn(!v);
@@ -54,9 +68,13 @@ export default function Settings({
   };
 
   const togglePause = useCallback(async () => {
+    if (pass !== savedPass) {
+      const ok = await persist();
+      if (!ok) return;
+    }
     const p = await MercuryApp.TogglePause();
     setPaused(!!p);
-  }, []);
+  }, [pass, savedPass, persist]);
 
   const pick = () => {
     MercuryApp.PickReceivedFolder().then((p: string | null) => {
@@ -77,7 +95,16 @@ export default function Settings({
                 ref={inputRef}
                 type={show ? "text" : "password"}
                 value={pass}
-                onChange={(e) => setPass(e.target.value)}
+                onChange={(e) => {
+                  setPass(e.target.value);
+                  setSaveError("");
+                }}
+                onBlur={() => {
+                  if (pass !== savedPass) void persist();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                }}
                 placeholder={copy.settings.passphrasePlaceholder}
                 aria-label="Passphrase"
               />
@@ -99,26 +126,12 @@ export default function Settings({
               role="switch"
               aria-checked={!paused}
               aria-label="Sync enabled"
+              disabled={!pass.trim()}
             />
           </div>
           <div className="group-note">{copy.settings.syncEnabledHint}</div>
-          <div className="group-row-actions">
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={save}
-              disabled={!pass}
-            >
-              {copy.settings.save}
-            </button>
-            <span
-              className={`save-feedback${saved ? " visible" : ""}`}
-              aria-live="polite"
-            >
-              {saved && <Check size={12} weight="bold" aria-hidden />}
-              {copy.settings.saved}
-            </span>
-          </div>
+          <div className="group-note">{copy.settings.autoSaveHint}</div>
+          {saveError && <p className="group-note save-error">{saveError}</p>}
         </div>
       </section>
 

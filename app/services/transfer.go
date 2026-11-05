@@ -41,6 +41,11 @@ func (s *TransferService) PendingOffers() []FileOffer {
 	return s.mgr.PendingOffers()
 }
 
+// OfferPeer returns the address that sent a pending offer.
+func (s *TransferService) OfferPeer(offerID string) string {
+	return s.mgr.OfferPeer(offerID)
+}
+
 // AcceptOffer starts receiving a file. Returns a transfer ID.
 func (s *TransferService) AcceptOffer(offerID, saveDir string) (string, error) {
 	return s.mgr.AcceptOffer(offerID, saveDir)
@@ -81,7 +86,22 @@ func (s *TransferService) AllProgress() []FileProgress {
 	return s.mgr.AllProgress()
 }
 
+// Progress returns one transfer's live state, or nil if it is unknown.
+func (s *TransferService) Progress(tid string) *FileProgress {
+	return s.mgr.Progress(tid)
+}
+
+// HasActiveTransfers reports whether a send or receive is in flight.
+func (s *TransferService) HasActiveTransfers() bool {
+	return s.mgr.HasActiveTransfers()
+}
+
 // CancelTransfer signals a running transfer to stop.
 func (s *TransferService) CancelTransfer(tid string) {
 	s.mgr.CancelTransfer(tid)
+}
+
+// DismissTransfer removes a finished transfer from the dashboard.
+func (s *TransferService) DismissTransfer(tid string) {
+	s.mgr.DismissTransfer(tid)
 }

@@ -30,16 +30,16 @@ Manual installers (`.dmg`, `.deb`, NSIS) are for first-time setup. In-app update
 
 | Platform | Requirements                                                                              |
 | -------- | ----------------------------------------------------------------------------------------- |
-| All      | [Go 1.25+](https://go.dev/dl/), [Bun](https://bun.sh/), [Wails v3 CLI](https://wails.io/) |
+| All      | [Go 1.26+](https://go.dev/dl/), [Bun](https://bun.sh/), [Wails v3 CLI](https://wails.io/) |
 | macOS    | Xcode Command Line Tools                                                                  |
 | Linux    | `libgtk-4-dev`, `libwebkitgtk-6.0-dev`                                                    |
 | Windows  | WebView2 (usually pre-installed)                                                          |
 
 ```bash
-go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0
 git clone https://github.com/striker561/Mercury.git
 cd Mercury
-GOTOOLCHAIN=go1.25.12 wails3 dev
+GOTOOLCHAIN=go1.26.0 wails3 dev
 ```
 
 Production packages (set `VERSION` to match your tag, without the `v` prefix in plist/nfpm metadata):

@@ -10,7 +10,7 @@
 // Override at build time with -ldflags so the binary carries the exact
 // tag without any hardcoded drift:
 //
-//	GOTOOLCHAIN=go1.25.12 go build  \
+//	GOTOOLCHAIN=go1.26.0 go build  \
 //		-ldflags "-X mercury/app.Version=v0.2.0"  \
 //		-o bin/mercury .
 //

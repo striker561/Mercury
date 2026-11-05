@@ -2,15 +2,23 @@ package sync
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"net"
 	"sync"
+	"time"
 
 	"mercury/app/backend/crypto"
 	"mercury/app/backend/transport"
 )
 
 // OnReceiveCallback is called when a decrypted clipboard payload arrives.
-type OnReceiveCallback func(payload []byte)
+type OnReceiveCallback func(payload []byte, remoteAddr string)
+
+type incomingClipboard struct {
+	payload    []byte
+	remoteAddr string
+}
 
 // Manager wires mDNS discovery, TCP transport, and crypto for clipboard sync.
 // Create with NewManager, then Start/Stop.
@@ -18,19 +26,30 @@ type Manager struct {
 	key      []byte
 	deviceID string
 	peerMap  *PeerMap
-	incoming chan []byte
+	incoming chan incomingClipboard
+	port     int
 
 	mu           sync.Mutex
 	running      bool
-	cancel       context.CancelFunc
-	wg           sync.WaitGroup
-	onReceive    OnReceiveCallback
+	lastErr      string
 	decryptFails int
+
+	// lifecycleMu serialises Start, Stop, Restart and RestartDiscovery.
+	lifecycleMu  sync.Mutex
+	tcpCancel    context.CancelFunc
+	tcpWG        sync.WaitGroup
+	discCancel   context.CancelFunc
+	discWG       sync.WaitGroup
+	stopAnnounce func()
+	added        chan Peer
+	boundPort    int
+
+	onReceive OnReceiveCallback
 
 	// OnMessage, if set, is called for every message the listener receives
 	// that is NOT MsgClipboard.  The app layer uses this to route file
 	// chunks to the transfer manager without coupling sync to transfer.
-	OnMessage func(msgType byte, payload []byte)
+	OnMessage func(msgType byte, payload []byte, remoteAddr string)
 }
 
 // NewManager creates a Manager that derives its encryption key from the
@@ -42,7 +61,8 @@ func NewManager(passphrase, deviceID string) *Manager {
 		key:      crypto.DeriveKey(passphrase),
 		deviceID: deviceID,
 		peerMap:  NewPeerMap(),
-		incoming: make(chan []byte, 10),
+		incoming: make(chan incomingClipboard, 10),
+		port:     transport.Port,
 	}
 }
 
@@ -53,6 +73,12 @@ func (m *Manager) SetOnReceive(cb OnReceiveCallback) {
 
 // Start begins LAN discovery, TCP listening, and the event loop.
 func (m *Manager) Start() error {
+	m.lifecycleMu.Lock()
+	defer m.lifecycleMu.Unlock()
+	return m.startLocked()
+}
+
+func (m *Manager) startLocked() error {
 	m.mu.Lock()
 	if m.running {
 		m.mu.Unlock()
@@ -60,103 +86,190 @@ func (m *Manager) Start() error {
 	}
 	m.mu.Unlock()
 
+	listener, err := transport.Bind(m.port)
+	if err != nil {
+		m.setError(err)
+		return err
+	}
+
+	port := m.port
+	if tcp, ok := listener.Addr().(*net.TCPAddr); ok {
+		port = tcp.Port
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	added := make(chan Peer, 10)
 
-	// Start the TCP listener first and wait until it's actually bound before
-	// announcing/browsing.  A peer that resolves during the startup window
-	// would otherwise hit a closed port (connection refused) — one source of
-	// the "first launch finds nothing" flakiness.
-	listenReady := make(chan struct{})
-	markReady := sync.OnceFunc(func() { close(listenReady) })
+	m.mu.Lock()
+	m.tcpCancel = cancel
+	m.mu.Unlock()
+	m.boundPort = port
+	m.tcpWG.Add(3)
 	go func() {
-		// Sync owns the TCP listener but routes non-clipboard messages
-		// (file chunks) to the app layer via OnMessage.
-		if err := transport.ListenWithReady(ctx, transport.Port, func(msgType byte, payload []byte) {
-			if msgType == transport.MsgClipboard {
-				select {
-				case m.incoming <- payload:
-				default:
-					log.Printf("[sync] dropped incoming (channel full)")
-				}
-				return
-			}
-			if m.OnMessage != nil {
-				m.OnMessage(msgType, payload)
-			}
-		}, func(string) { markReady() }); err != nil {
-			if ctx.Err() == nil {
-				log.Printf("[sync] listen error: %v", err)
-			}
-			markReady() // don't deadlock Start if the bind fails
+		defer m.tcpWG.Done()
+		if err := transport.Serve(ctx, listener, m.handleMessage); err != nil && ctx.Err() == nil {
+			log.Printf("[sync] listen error: %v", err)
 		}
 	}()
-	<-listenReady
+	go func() {
+		defer m.tcpWG.Done()
+		m.eventLoop(ctx, added)
+	}()
+	go func() {
+		defer m.tcpWG.Done()
+		m.heartbeatLoop(ctx)
+	}()
 
-	if err := Announce(ctx, transport.Port, "", m.deviceID); err != nil {
+	if err := m.startDiscoveryLocked(added, port); err != nil {
+		cancel()
+		m.tcpWG.Wait()
+		m.mu.Lock()
+		m.tcpCancel = nil
+		m.mu.Unlock()
+		m.setError(err)
+		return err
+	}
+
+	m.mu.Lock()
+	m.running = true
+	m.lastErr = ""
+	m.mu.Unlock()
+	return nil
+}
+
+func (m *Manager) handleMessage(msgType byte, payload []byte, remoteAddr string) {
+	if msgType == transport.MsgClipboard {
+		select {
+		case m.incoming <- incomingClipboard{payload: payload, remoteAddr: remoteAddr}:
+		default:
+			log.Printf("[sync] dropped incoming (channel full)")
+		}
+		return
+	}
+	if m.OnMessage != nil {
+		m.OnMessage(msgType, payload, remoteAddr)
+	}
+}
+
+func (m *Manager) startDiscoveryLocked(added chan Peer, port int) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	stop, err := Announce(ctx, port, "", m.deviceID)
+	if err != nil {
 		cancel()
 		return err
 	}
 
+	m.discCancel = cancel
+	m.stopAnnounce = stop
+	m.added = added
+	m.discWG.Add(1)
 	go func() {
-		if err := Browse(ctx, added, m.deviceID); err != nil {
-			if ctx.Err() == nil {
-				log.Printf("[sync] browse error: %v", err)
-			}
+		defer m.discWG.Done()
+		if err := Browse(ctx, added, m.deviceID); err != nil && ctx.Err() == nil {
+			log.Printf("[sync] browse error: %v", err)
 		}
 	}()
-
-	m.wg.Add(1)
-	go m.eventLoop(ctx, added)
-
-	m.mu.Lock()
-	m.running = true
-	m.cancel = cancel
-	m.mu.Unlock()
 	return nil
+}
+
+func (m *Manager) stopDiscoveryLocked() {
+	if m.discCancel != nil {
+		m.discCancel()
+		m.discCancel = nil
+	}
+	m.discWG.Wait()
+	if m.stopAnnounce != nil {
+		m.stopAnnounce()
+		m.stopAnnounce = nil
+	}
 }
 
 // Stop shuts down the manager, cancelling all goroutines and closing peer
 // connections.  Safe to call multiple times or when not running.
 func (m *Manager) Stop() {
+	m.lifecycleMu.Lock()
+	defer m.lifecycleMu.Unlock()
+	m.stopLocked()
+}
+
+func (m *Manager) stopLocked() {
 	m.mu.Lock()
-	cancel := m.cancel
-	running := m.running
-	if running {
-		m.running = false
-	}
+	m.running = false
+	cancel := m.tcpCancel
+	m.tcpCancel = nil
 	m.mu.Unlock()
 
-	if !running {
-		return
+	m.stopDiscoveryLocked()
+	if cancel != nil {
+		cancel()
 	}
-
-	cancel()
-	m.wg.Wait()
+	m.tcpWG.Wait()
 	m.peerMap.Stop()
 }
 
 // Restart stops the manager with a new passphrase and starts it again.
 func (m *Manager) Restart(passphrase string) error {
-	m.Stop()
+	m.lifecycleMu.Lock()
+	defer m.lifecycleMu.Unlock()
+
+	m.stopLocked()
+	for len(m.incoming) > 0 {
+		<-m.incoming
+	}
 
 	m.mu.Lock()
 	m.key = crypto.DeriveKey(passphrase)
-	m.peerMap = NewPeerMap()
-	m.incoming = make(chan []byte, 10)
 	m.decryptFails = 0
 	m.mu.Unlock()
+	m.peerMap.Clear()
 
-	return m.Start()
+	return m.startLocked()
+}
+
+// RestartDiscovery re-creates the mDNS resolver and registration.  The TCP
+// listener and the known peers stay up, so a network change cannot drop an
+// in-flight message or force a port rebind.
+func (m *Manager) RestartDiscovery() error {
+	m.lifecycleMu.Lock()
+	defer m.lifecycleMu.Unlock()
+
+	m.mu.Lock()
+	running := m.running
+	m.mu.Unlock()
+	if !running {
+		return fmt.Errorf("sync not running")
+	}
+
+	m.stopDiscoveryLocked()
+	if err := m.startDiscoveryLocked(m.added, m.boundPort); err != nil {
+		m.setError(err)
+		return err
+	}
+	m.setError(nil)
+	return nil
 }
 
 // Resync restarts discovery without changing the encryption key or dropping
-// known peers.  Re-creating the resolver is what re-snapshots the multicast
-// interfaces — the reliable "toggle off/on" effect — so the network watcher
-// uses this when the interfaces change or no peers are found for a while.
+// known peers.
 func (m *Manager) Resync() error {
-	m.Stop()
-	return m.Start()
+	return m.RestartDiscovery()
+}
+
+func (m *Manager) setError(err error) {
+	m.mu.Lock()
+	if err == nil {
+		m.lastErr = ""
+	} else {
+		m.lastErr = err.Error()
+	}
+	m.mu.Unlock()
+}
+
+// LastError returns the last lifecycle error, or "" when healthy.
+func (m *Manager) LastError() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.lastErr
 }
 
 // Broadcast encrypts the payload and sends it to all currently known peers
@@ -210,6 +323,26 @@ func (m *Manager) Broadcast(payload []byte) {
 	wg.Wait()
 }
 
+// SendTo encrypts one payload and sends it to a single address.
+func (m *Manager) SendTo(addr string, payload []byte) error {
+	m.mu.Lock()
+	key := m.key
+	running := m.running
+	m.mu.Unlock()
+
+	if !running {
+		return fmt.Errorf("sync not running")
+	}
+	ciphertext, err := crypto.Encrypt(payload, key)
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), transport.SendTimeout)
+	defer cancel()
+	return transport.Send(ctx, addr, ciphertext)
+}
+
 // PeerCount returns the number of currently known peers.
 func (m *Manager) PeerCount() int {
 	return m.peerMap.Len()
@@ -234,18 +367,63 @@ func (m *Manager) DecryptFailCount() int {
 	return m.decryptFails
 }
 
-// eventLoop decrypts clipboard payloads and dispatches to onReceive.
-// File chunks are handled entirely by the app layer via OnMessage —
-// this event loop knows nothing about them.
-func (m *Manager) eventLoop(ctx context.Context, added <-chan Peer) {
-	defer m.wg.Done()
+const (
+	heartbeatInterval = 10 * time.Second
+	probeTimeout      = 2 * time.Second
+)
+
+// heartbeatLoop probes every known peer so discovery is not mistaken for
+// reachability, and so a stale address is evicted after a network change.
+func (m *Manager) heartbeatLoop(ctx context.Context) {
+	ticker := time.NewTicker(heartbeatInterval)
+	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case ciphertext := <-m.incoming:
-			decrypted, err := crypto.Decrypt(ciphertext, m.key)
+		case <-ticker.C:
+			for _, p := range m.peerMap.GetPeers() {
+				go m.probePeer(ctx, p)
+			}
+		}
+	}
+}
+
+func (m *Manager) probePeer(ctx context.Context, p Peer) {
+	addrs := p.Addrs
+	if len(addrs) == 0 && p.Addr != "" {
+		addrs = []string{p.Addr}
+	}
+
+	dialer := net.Dialer{Timeout: probeTimeout}
+	for _, addr := range addrs {
+		conn, err := dialer.DialContext(ctx, "tcp", addr)
+		if err == nil {
+			conn.Close()
+			m.peerMap.MarkReachable(p.ID, addr)
+			return
+		}
+	}
+
+	if m.peerMap.RecordFailure(p.ID) {
+		log.Printf("[sync] evicted peer %s (no reachable address)", p.ID)
+	}
+}
+
+// eventLoop decrypts clipboard payloads and dispatches to onReceive.
+// File chunks are handled entirely by the app layer via OnMessage —
+// this event loop knows nothing about them.
+func (m *Manager) eventLoop(ctx context.Context, added <-chan Peer) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case msg := <-m.incoming:
+			m.mu.Lock()
+			key := m.key
+			m.mu.Unlock()
+			decrypted, err := crypto.Decrypt(msg.payload, key)
 			if err != nil {
 				m.mu.Lock()
 				m.decryptFails++
@@ -256,7 +434,7 @@ func (m *Manager) eventLoop(ctx context.Context, added <-chan Peer) {
 				m.decryptFails = 0
 				m.mu.Unlock()
 				if m.onReceive != nil {
-					m.onReceive(decrypted)
+					m.onReceive(decrypted, msg.remoteAddr)
 				}
 			}
 		case peer := <-added:

@@ -15,6 +15,8 @@ type DashboardState struct {
 	Offers        []services.FileOffer    `json:"offers"`
 	Transfers     []services.FileProgress `json:"transfers"`
 	Hint          string                  `json:"hint"`
+	SyncRunning   bool                    `json:"syncRunning"`
+	SyncError     string                  `json:"syncError"`
 	VpnActive     bool                    `json:"vpnActive"`
 	GnomeTrayTip  bool                    `json:"gnomeTrayTip"`
 }
@@ -39,6 +41,13 @@ func (m *MercuryApp) GetDashboardState() DashboardState {
 		peers = []map[string]string{}
 	}
 
+	syncRunning := false
+	syncError := ""
+	if m.syncSvc != nil {
+		syncRunning = m.syncSvc.Running()
+		syncError = friendlySyncError(m.syncSvc.LastError())
+	}
+
 	return DashboardState{
 		Peers:         peers,
 		Paused:        m.IsPaused(),
@@ -46,9 +55,21 @@ func (m *MercuryApp) GetDashboardState() DashboardState {
 		Offers:        offers,
 		Transfers:     active,
 		Hint:          m.dashboardHint(len(peers)),
+		SyncRunning:   syncRunning,
+		SyncError:     syncError,
 		VpnActive:     vpnActive(),
 		GnomeTrayTip:  m.gnomeTray,
 	}
+}
+
+func friendlySyncError(err string) string {
+	if err == "" {
+		return ""
+	}
+	if strings.Contains(err, "address already in use") {
+		return "Port 47821 is already in use. Quit the other Mercury copy, then retry."
+	}
+	return "Could not start sync: " + err
 }
 
 func (m *MercuryApp) dashboardHint(peerCount int) string {
@@ -70,7 +91,7 @@ func (m *MercuryApp) DashboardFingerprint() string {
 		peerCount = len(peers)
 		fmt.Fprintf(&b, "p=%d", peerCount)
 		for _, p := range peers {
-			fmt.Fprintf(&b, " %s@%s", p["id"], p["addr"])
+			fmt.Fprintf(&b, " %s@%s:%s", p["id"], p["addr"], p["reachable"])
 		}
 	} else {
 		b.WriteString("p=0")
@@ -79,6 +100,9 @@ func (m *MercuryApp) DashboardFingerprint() string {
 	paused := m.IsPaused()
 	hasPass := m.GetSavedPassphrase() != ""
 	fmt.Fprintf(&b, " paused=%v pass=%v", paused, hasPass)
+	if m.syncSvc != nil {
+		fmt.Fprintf(&b, " running=%v err=%q", m.syncSvc.Running(), m.syncSvc.LastError())
+	}
 
 	offers := m.GetPendingFileOffers()
 	if offers == nil {

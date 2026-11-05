@@ -106,7 +106,7 @@ function App() {
           ) : (
             <>
               {showWelcome && <Welcome onGetStarted={handleGetStarted} />}
-              <ConnectionHero state={state} />
+              <ConnectionHero state={state} onRetry={refresh} />
               <ActivityStrip active={syncActive} />
               <FileTransfer
                 offers={state.offers}

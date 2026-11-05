@@ -18,6 +18,7 @@ function normalize(raw: RawDashboardState): DashboardState {
       id: p.id ?? "",
       hostname: p.hostname ?? p.id ?? "",
       addr: p.addr ?? "",
+      reachable: p.reachable === "true",
       lastSeen: p.lastSeen,
     }));
 
@@ -28,6 +29,8 @@ function normalize(raw: RawDashboardState): DashboardState {
     offers: raw.offers ?? [],
     transfers: raw.transfers ?? [],
     hint: raw.hint ?? "",
+    syncRunning: raw.syncRunning ?? false,
+    syncError: raw.syncError ?? "",
     vpnActive: raw.vpnActive ?? false,
     gnomeTrayTip: raw.gnomeTrayTip ?? false,
   };

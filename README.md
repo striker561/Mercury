@@ -85,7 +85,7 @@ Ship a release by pushing a semver tag, e.g. `git tag v0.2.0 && git push origin 
 
 ### Prerequisites
 
-- Go 1.25+ (we use the toolchain, you heathen)
+- Go 1.26+ (we use the toolchain, you heathen)
 - Bun
 - Wails v3 CLI
 - **Linux:** `libgtk-4-dev`, `libwebkitgtk-6.0-dev`
@@ -95,7 +95,7 @@ Ship a release by pushing a semver tag, e.g. `git tag v0.2.0 && git push origin 
 ### Install Wails v3
 
 ```bash
-go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0
 ```
 
 ### Run in Dev Mode
@@ -103,7 +103,7 @@ go install github.com/wailsapp/wails/v3/cmd/wails3@latest
 ```bash
 git clone https://github.com/striker561/Mercury.git
 cd Mercury
-GOTOOLCHAIN=go1.25.12 wails3 dev
+GOTOOLCHAIN=go1.26.0 wails3 dev
 ```
 
 The tray appears. The frontend hot-reloads. You change code. It updates. For a moment you feel like a god. That is intentional. Do not get used to it.
@@ -111,7 +111,7 @@ The tray appears. The frontend hot-reloads. You change code. It updates. For a m
 ### Build for Production
 
 ```bash
-GOTOOLCHAIN=go1.25.12 wails3 task build
+GOTOOLCHAIN=go1.26.0 wails3 task build
 ```
 
 Or platform packages:

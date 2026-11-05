@@ -10,26 +10,28 @@ import (
 // No migration needed — missing keys return the default value automatically.
 
 const (
-	KeyPassphrase     = "passphrase"
-	KeySyncEnabled    = "sync_enabled"
-	KeyPaused         = "paused"
-	KeyAllowFiles     = "allow_files"
-	KeyReceivedFolder = "received_folder"
-	KeyAutostart      = "autostart"
-	KeyAutoAccept     = "auto_accept"
-	KeyDeviceID       = "device_id"
+	KeyPassphrase      = "passphrase"
+	KeySyncEnabled     = "sync_enabled"
+	KeyPaused          = "paused"
+	KeyAllowFiles      = "allow_files"
+	KeyReceivedFolder  = "received_folder"
+	KeyAutostart       = "autostart"
+	KeyAutoAccept      = "auto_accept"
+	KeyDeviceID        = "device_id"
+	KeyLastUpdateCheck = "last_update_check"
 )
 
 // defaultValues holds the fallback for every known setting.
 var defaultValues = map[string]string{
-	KeyPassphrase:     "",
-	KeySyncEnabled:    "false",
-	KeyPaused:         "false",
-	KeyAllowFiles:     "true",
-	KeyReceivedFolder: "~/Downloads/Mercury/",
-	KeyAutostart:      "false",
-	KeyAutoAccept:     "false",
-	KeyDeviceID:       "",
+	KeyPassphrase:      "",
+	KeySyncEnabled:     "false",
+	KeyPaused:          "false",
+	KeyAllowFiles:      "true",
+	KeyReceivedFolder:  "~/Downloads/Mercury/",
+	KeyAutostart:       "false",
+	KeyAutoAccept:      "false",
+	KeyDeviceID:        "",
+	KeyLastUpdateCheck: "",
 }
 
 // EnsureDeviceID returns this installation's stable machine ID, generating

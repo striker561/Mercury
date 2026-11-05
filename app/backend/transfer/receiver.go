@@ -1,113 +1,167 @@
 package transfer
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
-// receiveFile reads decrypted chunks from the per-offer channel and writes them to disk.
-func (m *Manager) receiveFile(tid, offerID string, o *Offer, saveDir string, ch <-chan []byte) {
-	failed := true
+// receiveFile writes to a .part file and renames only after the full size.
+func (m *Manager) receiveFile(tid, offerID string, o *Offer, saveDir string, stream *receiveStream) {
+	dst := uniqueDestination(filepath.Join(saveDir, safeName(o.FileName)))
+	part := fmt.Sprintf("%s.part-%s", dst, offerID)
+
+	var failReason string
+	success := false
+
 	defer func() {
 		m.mu.Lock()
-		delete(m.receiveCh, offerID)
+		if m.receiveCh[offerID] == stream {
+			delete(m.receiveCh, offerID)
+		}
 		delete(m.cancel, tid)
 		m.mu.Unlock()
-		if failed {
-			m.updateStatus(tid, StatusFailed, 0)
-			// Clean up the partial file on failure/cancel.
-			dst := filepath.Join(saveDir, o.FileName)
-			if err := os.Remove(dst); err != nil && !os.IsNotExist(err) {
-				log.Printf("[transfer] cleanup %s: %v", dst, err)
-			}
+		close(stream.done)
+
+		if success {
+			m.updateStatus(tid, StatusDone, o.FileSize)
+			m.updateSpeed(tid, 0)
+			log.Printf("[transfer] received %s (%d bytes)", o.FileName, o.FileSize)
+			return
 		}
+		if failReason == "" {
+			failReason = "transfer interrupted"
+		}
+		m.fail(tid, failReason)
+		log.Printf("[transfer] receive %s failed: %s", o.FileName, failReason)
 	}()
 
-	log.Printf("[transfer] receiving %s to %s", o.FileName, saveDir)
+	log.Printf("[transfer] receiving %s to %s", o.FileName, dst)
 	m.updateStatus(tid, StatusReceiving, 0)
 
-	// Register cancel channel.
 	cancelCh := make(chan struct{})
 	m.mu.Lock()
 	m.cancel[tid] = cancelCh
 	m.mu.Unlock()
 
 	if err := os.MkdirAll(saveDir, 0755); err != nil {
-		log.Printf("[transfer] mkdir %s: %v", saveDir, err)
+		failReason = fmt.Sprintf("create folder: %v", err)
 		return
 	}
 
-	dst := filepath.Join(saveDir, o.FileName)
-	f, err := os.Create(dst)
+	f, err := os.Create(part)
 	if err != nil {
-		log.Printf("[transfer] create %s: %v", dst, err)
+		failReason = fmt.Sprintf("create file: %v", err)
 		return
 	}
-	defer f.Close()
+	defer func() {
+		f.Close()
+		if !success {
+			if err := os.Remove(part); err != nil && !os.IsNotExist(err) {
+				log.Printf("[transfer] cleanup %s: %v", part, err)
+			}
+		}
+	}()
 
 	var received int64
 	startTime := time.Now()
-
-	// Progress ticker — update UI every 200ms.
 	progressTick := time.NewTicker(200 * time.Millisecond)
 	defer progressTick.Stop()
-
-	// Chunks arrive already decrypted via sync → OnWireMessage → per-offer channel.
-	// Read until file is complete or the sender closes the channel (MsgFileEnd).
 	timeout := time.NewTimer(30 * time.Second)
 	defer timeout.Stop()
 
+	writeChunk := func(chunk []byte) bool {
+		if _, err := f.Write(chunk); err != nil {
+			failReason = fmt.Sprintf("write: %v", err)
+			return false
+		}
+		received += int64(len(chunk))
+		timeout.Reset(30 * time.Second)
+		select {
+		case <-progressTick.C:
+			if elapsed := time.Since(startTime).Seconds(); elapsed > 0 {
+				m.updateSpeed(tid, int64(float64(received)/elapsed))
+			}
+			m.updateStatus(tid, StatusReceiving, received)
+		default:
+		}
+		return true
+	}
+
+	finish := func() {
+		if received != o.FileSize {
+			failReason = fmt.Sprintf("connection closed at %d/%d bytes", received, o.FileSize)
+			return
+		}
+		if err := f.Close(); err != nil {
+			failReason = fmt.Sprintf("close: %v", err)
+			return
+		}
+		if err := os.Rename(part, dst); err != nil {
+			failReason = fmt.Sprintf("rename: %v", err)
+			return
+		}
+		success = true
+	}
+
 	for received < o.FileSize {
 		select {
-		case chunk, ok := <-ch:
-			if !ok {
-				if received != o.FileSize {
-					log.Printf("[transfer] connection closed early (%d/%d)", received, o.FileSize)
-					return
-				}
-				failed = false
-				m.updateStatus(tid, StatusDone, received)
-				m.updateSpeed(tid, 0)
-				log.Printf("[transfer] received %s (%d bytes)", o.FileName, received)
+		case chunk := <-stream.chunks:
+			if !writeChunk(chunk) {
 				return
 			}
-
-			if _, err := f.Write(chunk); err != nil {
-				log.Printf("[transfer] write: %v", err)
-				return
-			}
-			received += int64(len(chunk))
-			timeout.Reset(30 * time.Second)
-
-			// Push progress to frontend periodically with speed.
-			select {
-			case <-progressTick.C:
-				elapsed := time.Since(startTime).Seconds()
-				if elapsed > 0 {
-					m.updateSpeed(tid, int64(float64(received)/elapsed))
-				}
-				m.updateStatus(tid, StatusReceiving, received)
-			default:
-			}
-
-			// Check for cancel.
 			select {
 			case <-cancelCh:
-				log.Printf("[transfer] receive %s cancelled at %d/%d", o.FileName, received, o.FileSize)
+				failReason = "cancelled"
 				return
 			default:
 			}
-
+		case <-stream.end:
+			for {
+				select {
+				case chunk := <-stream.chunks:
+					if !writeChunk(chunk) {
+						return
+					}
+				default:
+					finish()
+					return
+				}
+			}
 		case <-timeout.C:
-			log.Printf("[transfer] timeout waiting for chunk (%d/%d)", received, o.FileSize)
+			failReason = fmt.Sprintf("timed out at %d/%d bytes", received, o.FileSize)
+			return
+		case <-cancelCh:
+			failReason = "cancelled"
 			return
 		}
 	}
 
-	failed = false
-	m.updateStatus(tid, StatusDone, received)
-	m.updateSpeed(tid, 0)
-	log.Printf("[transfer] received %s (%d bytes)", o.FileName, received)
+	finish()
+}
+
+func safeName(name string) string {
+	name = filepath.Base(strings.ReplaceAll(name, `\`, "/"))
+	if name == "" || name == "." || name == ".." {
+		return "download"
+	}
+	return name
+}
+
+func uniqueDestination(path string) string {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return path
+	}
+	ext := filepath.Ext(path)
+	base := strings.TrimSuffix(path, ext)
+	for i := 1; i < 10000; i++ {
+		candidate := fmt.Sprintf("%s (%d)%s", base, i, ext)
+		if _, err := os.Stat(candidate); os.IsNotExist(err) {
+			return candidate
+		}
+	}
+	return path
 }

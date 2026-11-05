@@ -5,13 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build:dev": "tsc && vite build --minify false --mode development",
-    "build": "tsc && vite build --mode production",
+    "build:dev": "tsc && vite build --minify false --mode development && node scripts/keep-dist-gitkeep.mjs",
+    "build": "tsc && vite build --mode production && node scripts/keep-dist-gitkeep.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
-    "@wailsio/runtime": "latest",
+    "@wailsio/runtime": "3.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },

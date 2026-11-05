@@ -2,6 +2,7 @@ export interface Peer {
   id: string;
   hostname?: string;
   addr: string;
+  reachable?: boolean;
   lastSeen?: string;
 }
 
@@ -19,6 +20,7 @@ export interface FileProgress {
   received: number;
   speed: number;
   status: string;
+  error?: string;
 }
 
 export interface DashboardState {
@@ -28,6 +30,8 @@ export interface DashboardState {
   offers: FileOffer[];
   transfers: FileProgress[];
   hint?: string;
+  syncRunning?: boolean;
+  syncError?: string;
   vpnActive?: boolean;
   gnomeTrayTip?: boolean;
 }

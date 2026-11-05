@@ -1,6 +1,17 @@
 package transfer
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
+
+func newTestReceiveStream() *receiveStream {
+	return &receiveStream{
+		chunks: make(chan []byte, 2),
+		end:    make(chan struct{}),
+		done:   make(chan struct{}),
+	}
+}
 
 func TestPackChunkPayload(t *testing.T) {
 	offerID := "0123456789abcdef"
@@ -29,26 +40,26 @@ func TestOnWireMessageRoutesByOfferID(t *testing.T) {
 	m := NewManager(nil)
 	offerA := "aaaaaaaaaaaaaaaa"
 	offerB := "bbbbbbbbbbbbbbbb"
-	chA := make(chan []byte, 2)
-	chB := make(chan []byte, 2)
-	m.receiveCh[offerA] = chA
-	m.receiveCh[offerB] = chB
+	streamA := newTestReceiveStream()
+	streamB := newTestReceiveStream()
+	m.receiveCh[offerA] = streamA
+	m.receiveCh[offerB] = streamB
 
 	wireA, _ := packChunkPayload(offerA, []byte("aaa"))
 	m.OnWireMessage(1, wireA)
 
 	select {
-	case got := <-chA:
+	case got := <-streamA.chunks:
 		if string(got) != "aaa" {
-			t.Fatalf("chA got %q", got)
+			t.Fatalf("streamA got %q", got)
 		}
 	default:
-		t.Fatal("expected chunk on chA")
+		t.Fatal("expected chunk on streamA")
 	}
 
 	select {
-	case <-chB:
-		t.Fatal("unexpected chunk on chB")
+	case <-streamB.chunks:
+		t.Fatal("unexpected chunk on streamB")
 	default:
 	}
 }
@@ -56,17 +67,45 @@ func TestOnWireMessageRoutesByOfferID(t *testing.T) {
 func TestOnWireMessageEndMarker(t *testing.T) {
 	m := NewManager(nil)
 	offerID := "cccccccccccccccc"
-	ch := make(chan []byte, 1)
-	m.receiveCh[offerID] = ch
+	stream := newTestReceiveStream()
+	m.receiveCh[offerID] = stream
 
 	m.OnWireMessage(2, []byte(offerID))
 
 	select {
-	case _, ok := <-ch:
-		if ok {
-			t.Fatal("channel should be closed, not deliver data")
-		}
+	case <-stream.end:
 	default:
-		t.Fatal("expected channel to be closed")
+		t.Fatal("expected the end marker to close the stream")
+	}
+}
+
+func TestOnWireMessageBlocksInsteadOfDropping(t *testing.T) {
+	m := NewManager(nil)
+	offerID := "dddddddddddddddd"
+	stream := newTestReceiveStream()
+	stream.chunks = make(chan []byte, 1)
+	m.receiveCh[offerID] = stream
+
+	wire, _ := packChunkPayload(offerID, []byte("first"))
+	m.OnWireMessage(1, wire)
+
+	done := make(chan struct{})
+	go func() {
+		m.OnWireMessage(1, wire)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		t.Fatal("a full stream must apply backpressure, not drop")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	<-stream.chunks
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("blocked send did not resume after the chunk was consumed")
 	}
 }

@@ -16,6 +16,14 @@ export const copy = {
     pausedTitle: "I rest",
     pausedSub: "Resume me in Settings when you are ready to serve again.",
     issueTitle: "Something is wrong",
+    syncErrorTitle: "Sync needs attention",
+    syncStoppedTitle: "Sync is stopped",
+    syncStoppedSub: "I am not listening right now. Retry to start again.",
+    searchingTitle: "Searching for devices",
+    searchingSub:
+      "I am listening on this network. Open Mercury on another machine with the same passphrase.",
+    retry: "Retry",
+    retrying: "Retrying…",
     vpnTitle: "VPN detected",
     vpnSub:
       "Your VPN may block LAN sync. If copies fail one way, turn the VPN off and try again.",
@@ -45,6 +53,8 @@ export const copy = {
     emptyHint:
       "Other machines show up here once Mercury is running on the same LAN.",
     unknown: "Unknown device",
+    checking: "Checking connection…",
+    reachable: "Connected",
   },
 
   transfers: {
@@ -53,6 +63,7 @@ export const copy = {
     decline: "Decline",
     accept: "Accept",
     cancel: "Cancel",
+    dismiss: "Dismiss",
   },
 
   settings: {
@@ -66,10 +77,10 @@ export const copy = {
     presenceHint: "Whether I wake when you log in.",
     passphrase: "Passphrase",
     passphrasePlaceholder: "Same on every device",
+    passphraseRequired: "Set a passphrase first.",
+    autoSaveHint: "Saves when you leave the field or press Enter.",
     syncEnabled: "Clipboard sync",
     syncEnabledHint: "Off means I rest. No watching, no delivering.",
-    save: "Save & start",
-    saved: "Saved",
     saveTo: "Save files to",
     change: "Choose…",
     acceptFiles: "Allow file offers",

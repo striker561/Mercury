@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -21,32 +22,34 @@ const singleInstanceID = "com.mercury.app"
 // Run is the real Mercury entry point, called from root main.go.
 // assets is the embedded frontend/dist from the root module.
 func Run(assets embed.FS) error {
+	configureLinuxRenderer()
+
 	// Detect if running under GNOME (tray may not work without AppIndicator).
 	isGNOME := detectGNOME()
 
 	mercuryApp := NewMercuryApp()
 	if isGNOME {
-		mercuryApp.SetGNOMETrayTip(true)
+		mercuryApp.setGNOMETrayTip(true)
 	}
 
 	// Create notification service for OS-level file offer alerts.
 	// On macOS this requires a bundled .app with a valid CFBundleIdentifier
-	// (only available in production builds).  In dev mode we skip it.
+	// (only available in production builds).  In dev mode we fall back to
+	// osascript instead of registering a service that cannot deliver.
 	notifySvc := notifications.New()
-	mercuryApp.SetNotifier(notifySvc)
 
 	svcs := []application.Service{
 		application.NewService(mercuryApp),
 	}
-	// Only register the notification service when running from a proper
-	// macOS bundle (or on Linux/Windows where it always works).
 	if !isDarwinDev() {
 		svcs = append(svcs, application.NewService(notifySvc))
+		mercuryApp.setNotifier(notifySvc)
 	} else {
-		log.Println("[mercury] skipping notification service (dev mode — no bundle ID)")
+		log.Println("[mercury] notification service unavailable (dev mode — using osascript)")
 	}
 
 	var settingsWindow *application.WebviewWindow
+	var showSettings func()
 
 	app := application.New(application.Options{
 		Name:        "Mercury",
@@ -59,9 +62,8 @@ func Run(assets embed.FS) error {
 			UniqueID: singleInstanceID,
 			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
 				log.Printf("[mercury] second instance launch args=%v", data.Args)
-				if settingsWindow != nil {
-					settingsWindow.Show()
-					settingsWindow.Focus()
+				if showSettings != nil {
+					showSettings()
 				}
 			},
 			ExitCode: 0,
@@ -70,23 +72,22 @@ func Run(assets embed.FS) error {
 			ActivationPolicy: application.ActivationPolicyAccessory,
 			ApplicationShouldTerminateAfterLastWindowClosed: false,
 		},
+		Windows: application.WindowsOptions{
+			DisableQuitOnLastWindowClosed: true,
+		},
+		Linux: application.LinuxOptions{
+			DisableQuitOnLastWindowClosed: true,
+		},
 	})
 
 	// Wire the autostart manager so the "Start on login" setting works.
-	mercuryApp.SetAutostartManager(app.Autostart)
+	mercuryApp.setAutostartManager(app.Autostart)
 
 	// Wire the in-app updater against GitHub Releases.
 	if err := configureUpdater(app); err != nil {
 		return err
 	}
-	startSilentUpdateCheck(app, func(title, body string) {
-		if notifySvc != nil {
-			_ = notifySvc.SendNotification(notifications.NotificationOptions{
-				Title: title,
-				Body:  body,
-			})
-		}
-	})
+	startSilentUpdateCheck(app, mercuryApp)
 
 	// Create the settings window (hidden by default, shown on tray click).
 	settingsWindow = app.Window.NewWithOptions(application.WebviewWindowOptions{
@@ -105,13 +106,27 @@ func Run(assets embed.FS) error {
 		},
 	})
 
-	toggleWindow := func() {
-		if settingsWindow.IsVisible() {
-			settingsWindow.Hide()
-		} else {
-			settingsWindow.Show()
-			settingsWindow.Focus()
+	showSettings = func() {
+		if settingsWindow == nil {
+			return
 		}
+		app.Show()
+		settingsWindow.Restore()
+		settingsWindow.Show()
+		settingsWindow.Focus()
+	}
+
+	toggleWindow := func() {
+		if !settingsWindow.IsVisible() {
+			showSettings()
+			return
+		}
+		if !settingsWindow.IsFocused() {
+			settingsWindow.Restore()
+			settingsWindow.Focus()
+			return
+		}
+		settingsWindow.Hide()
 	}
 
 	// Hide instead of close — we're a tray app, closing should keep us running.
@@ -130,31 +145,22 @@ func Run(assets embed.FS) error {
 	}
 
 	// Wire window show/hide so file offers can pop open the settings.
-	mercuryApp.SetShowWindow(func() {
-		settingsWindow.Show()
-		settingsWindow.Focus()
-	})
-	mercuryApp.SetHideWindow(func() {
+	mercuryApp.setShowWindow(showSettings)
+	mercuryApp.setHideWindow(func() {
 		settingsWindow.Hide()
 	})
 
 	// Create the system tray with an icon (required on macOS — without one,
 	// the tray item is invisible in the menu bar).
 	tray := app.SystemTray.New()
-	tray.SetTemplateIcon(trayIconWhite)
-	tray.SetDarkModeIcon(trayIconWhite)
-	tray.SetIcon(trayIconWhite)
 
-	menu, refs := system.BuildMenu(app, func() {
-		settingsWindow.Show()
-		settingsWindow.Focus()
-	})
+	menu, refs := system.BuildMenu(app, showSettings, mercuryApp.markUpdateChecked)
 	tray.SetMenu(menu)
 
 	// Left-click toggles the window; right-click opens the tray menu.
 	tray.OnClick(toggleWindow)
 
-	mercuryApp.SetEmitChange(func() {
+	mercuryApp.setEmitChange(func() {
 		app.Event.Emit("dashboard:changed")
 		updateTray(tray, refs, mercuryApp)
 	})
@@ -215,6 +221,63 @@ func isDarwinDev() bool {
 	return !strings.Contains(filepath.ToSlash(exe), ".app/Contents/MacOS/")
 }
 
+// Temporary: Wails v3.1.0 stopped applying WebKitGTK's NVIDIA DMA-BUF workaround
+// on hybrid Wayland, and GTK4's GL renderer aborts when EGL is unavailable.
+// Remove when upstream handles both.
+const linuxRenderFallback = true
+
+func configureLinuxRenderer() {
+	if !linuxRenderFallback || runtime.GOOS != "linux" {
+		return
+	}
+	hasNvidia := hasNVIDIA()
+	if hasNvidia && os.Getenv("WEBKIT_DISABLE_DMABUF_RENDERER") == "" {
+		_ = os.Setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
+	}
+
+	sessionType := os.Getenv("XDG_SESSION_TYPE")
+	waylandDisplay := os.Getenv("WAYLAND_DISPLAY")
+	desktop := os.Getenv("XDG_CURRENT_DESKTOP")
+	gskRenderer := os.Getenv("GSK_RENDERER")
+	force := os.Getenv("MERCURY_FORCE_CAIRO") != ""
+
+	if waylandDisplay != "" || sessionType == "wayland" || force {
+		log.Printf("[mercury] renderer check: session=%q desktop=%q gdk=%q gsk=%q wayland=%q nvidia=%v force=%v",
+			sessionType, desktop, os.Getenv("GDK_BACKEND"), gskRenderer, waylandDisplay, hasNvidia, force)
+	}
+	if !needsCairoRenderer(runtime.GOOS, gskRenderer, sessionType, waylandDisplay, desktop, hasNvidia, force) {
+		return
+	}
+	_ = os.Setenv("GSK_RENDERER", "cairo")
+	if force {
+		log.Println("[mercury] MERCURY_FORCE_CAIRO set; using GTK Cairo renderer")
+	} else {
+		log.Println("[mercury] COSMIC NVIDIA Wayland detected; using GTK Cairo renderer")
+	}
+}
+
+func needsCairoRenderer(goos, gskRenderer, sessionType, waylandDisplay, desktop string, hasNVIDIA, force bool) bool {
+	if goos != "linux" {
+		return false
+	}
+	if force {
+		return true
+	}
+	wayland := sessionType == "wayland" || waylandDisplay != ""
+	desktop = strings.ToUpper(desktop)
+	return gskRenderer == "" && wayland && hasNVIDIA &&
+		(strings.Contains(desktop, "COSMIC") || strings.Contains(desktop, "POP"))
+}
+
+func hasNVIDIA() bool {
+	for _, path := range []string{"/sys/module/nvidia", "/proc/driver/nvidia/version", "/dev/nvidia0"} {
+		if _, err := os.Stat(path); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
 // detectGNOME checks if we're running under the GNOME desktop environment.
 func detectGNOME() bool {
 	// Check XDG_CURRENT_DESKTOP and GDMSESSION env vars.
@@ -223,27 +286,40 @@ func detectGNOME() bool {
 	return strings.Contains(desktop, "gnome") || strings.Contains(session, "gnome")
 }
 
+func setTrayIcon(tray *application.SystemTray, active bool) {
+	icon := trayIconWhite
+	if active {
+		icon = trayIconActiveWhite
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		tray.SetTemplateIcon(icon)
+	case "windows":
+		tray.SetIcon(icon)
+		tray.SetDarkModeIcon(icon)
+	default:
+		tray.SetIcon(icon)
+	}
+}
+
 // updateTray refreshes the tray icon and status label from current app state.
 func updateTray(tray *application.SystemTray, refs *system.MenuRefs, mercuryApp *MercuryApp) {
-	if mercuryApp.trayActive() {
-		tray.SetTemplateIcon(trayIconActiveWhite)
-		tray.SetDarkModeIcon(trayIconActiveWhite)
-		tray.SetIcon(trayIconActiveWhite)
-	} else {
-		tray.SetTemplateIcon(trayIconWhite)
-		tray.SetDarkModeIcon(trayIconWhite)
-		tray.SetIcon(trayIconWhite)
-	}
-
+	active := mercuryApp.trayActive()
 	n := mercuryApp.GetPeerCount()
 	paused := mercuryApp.IsPaused()
 	var status string
 	if paused {
 		status = "⏸ Resting"
 	} else if n > 0 {
-		status = fmt.Sprintf("● In service (%d peer%s)", n, map[bool]string{true: "", false: "s"}[n == 1])
+		peerSuffix := "s"
+		if n == 1 {
+			peerSuffix = ""
+		}
+		status = fmt.Sprintf("● In service (%d peer%s)", n, peerSuffix)
 	} else {
 		status = "○ Awaiting fleet"
 	}
+
+	setTrayIcon(tray, active)
 	refs.Status.SetLabel(status)
 }

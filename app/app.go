@@ -5,7 +5,10 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"mercury/app/backend/clipboard"
@@ -21,6 +24,7 @@ import (
 
 // MercuryApp is the main application struct exposed to the Wails frontend.
 type MercuryApp struct {
+	syncMu     sync.Mutex
 	syncSvc    *services.SyncService
 	clipSvc    *services.ClipboardService
 	db         *storage.DB
@@ -30,22 +34,22 @@ type MercuryApp struct {
 	emitChange func()
 	notifySvc  *notifications.NotificationService
 	autostart  *application.AutostartManager
-	syncAt     time.Time // last clipboard sync activity
-	gnomeTray  bool      // GNOME detected — tray may need AppIndicator
+	syncAt     atomic.Int64 // unix nanos of the last clipboard sync
+	gnomeTray  bool         // GNOME detected — tray may need AppIndicator
 }
 
-// SetShowWindow registers a callback to show the settings window.
-func (m *MercuryApp) SetShowWindow(fn func()) {
+// setShowWindow registers a callback to show the settings window.
+func (m *MercuryApp) setShowWindow(fn func()) {
 	m.showWindow = fn
 }
 
-// SetHideWindow registers a callback to hide the settings window.
-func (m *MercuryApp) SetHideWindow(fn func()) {
+// setHideWindow registers a callback to hide the settings window.
+func (m *MercuryApp) setHideWindow(fn func()) {
 	m.hideWindow = fn
 }
 
-// SetEmitChange registers a callback invoked when dashboard state changes.
-func (m *MercuryApp) SetEmitChange(fn func()) {
+// setEmitChange registers a callback invoked when dashboard state changes.
+func (m *MercuryApp) setEmitChange(fn func()) {
 	m.emitChange = fn
 }
 
@@ -56,18 +60,57 @@ func (m *MercuryApp) HideWindow() {
 	}
 }
 
-// SetNotifier stores the notification service for OS-level alerts.
-func (m *MercuryApp) SetNotifier(ns *notifications.NotificationService) {
+// setNotifier stores the notification service for OS-level alerts.
+func (m *MercuryApp) setNotifier(ns *notifications.NotificationService) {
 	m.notifySvc = ns
 }
 
-// SetGNOMETrayTip marks that the app is running under GNOME.
-func (m *MercuryApp) SetGNOMETrayTip(enabled bool) {
+// notify falls back to the OS CLI when the Wails service is unavailable.
+func (m *MercuryApp) notify(title, body string) {
+	if m.notifySvc != nil {
+		err := m.notifySvc.SendNotification(notifications.NotificationOptions{
+			Title: title,
+			Body:  body,
+		})
+		if err == nil {
+			return
+		}
+		log.Printf("[mercury] notification service: %v", err)
+	}
+	if err := sendPlatformNotification(title, body); err != nil {
+		log.Printf("[mercury] notification fallback: %v", err)
+	}
+}
+
+func sendPlatformNotification(title, body string) error {
+	switch runtime.GOOS {
+	case "darwin":
+		script := fmt.Sprintf("display notification %s with title %s",
+			appleScriptQuote(body), appleScriptQuote(title))
+		return exec.Command("osascript", "-e", script).Run()
+	case "linux":
+		if _, err := exec.LookPath("notify-send"); err != nil {
+			return err
+		}
+		return exec.Command("notify-send", title, body).Run()
+	default:
+		return fmt.Errorf("no notification fallback for %s", runtime.GOOS)
+	}
+}
+
+func appleScriptQuote(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	return `"` + s + `"`
+}
+
+// setGNOMETrayTip marks that the app is running under GNOME.
+func (m *MercuryApp) setGNOMETrayTip(enabled bool) {
 	m.gnomeTray = enabled
 }
 
-// SetAutostartManager stores the OS autostart manager.
-func (m *MercuryApp) SetAutostartManager(am *application.AutostartManager) {
+// setAutostartManager stores the OS autostart manager.
+func (m *MercuryApp) setAutostartManager(am *application.AutostartManager) {
 	m.autostart = am
 }
 
@@ -100,17 +143,32 @@ func (m *MercuryApp) GetVersion() string {
 	return Version
 }
 
-// SetPassphrase saves the passphrase and starts syncing.
+// SetPassphrase saves the passphrase and starts syncing.  Re-saving the same
+// passphrase leaves a healthy session alone.
 func (m *MercuryApp) SetPassphrase(passphrase string) {
+	m.syncMu.Lock()
+	defer m.syncMu.Unlock()
+
+	unchanged := m.db != nil && passphrase != "" && m.db.GetPassphrase() == passphrase
 	if m.db != nil {
 		m.db.SetPassphrase(passphrase)
 	}
-	m.startSync(passphrase)
+	if unchanged && m.syncSvc != nil && m.syncSvc.Running() && m.syncSvc.LastError() == "" {
+		m.notifyChange()
+		return
+	}
+	m.startSyncLocked(passphrase)
 	m.notifyChange()
 }
 
 // startSync initializes clipboard and begins syncing.
 func (m *MercuryApp) startSync(passphrase string) {
+	m.syncMu.Lock()
+	defer m.syncMu.Unlock()
+	m.startSyncLocked(passphrase)
+}
+
+func (m *MercuryApp) startSyncLocked(passphrase string) {
 	log.Printf("[mercury] starting sync")
 
 	if err := goclipboard.Init(); err != nil {
@@ -125,7 +183,8 @@ func (m *MercuryApp) startSync(passphrase string) {
 		m.clipSvc.Stop()
 	}
 
-	m.syncSvc = services.NewSyncService(passphrase, storage.EnsureDeviceID(m.db))
+	syncSvc := services.NewSyncService(passphrase, storage.EnsureDeviceID(m.db))
+	m.syncSvc = syncSvc
 
 	// Wire the shared TCP listener: sync handles clipboard, transfer handles
 	// file chunks.  They don't know about each other — OnMessage is the glue.
@@ -134,63 +193,103 @@ func (m *MercuryApp) startSync(passphrase string) {
 	// types.  Clipboard is decrypted by sync's event loop; file chunks must
 	// be decrypted here before feeding into the transfer manager.
 	key := services.DeriveKey(passphrase)
-	m.transSvc = services.NewTransferService(key)
-	m.syncSvc.SetOnMessage(func(msgType byte, payload []byte) {
+	transSvc := services.NewTransferService(key)
+	m.transSvc = transSvc
+
+	syncSvc.SetOnMessage(func(msgType byte, payload []byte, _ string) {
 		dec, err := crypto.Decrypt(payload, key)
 		if err != nil {
 			log.Printf("[mercury] decrypt chunk: %v", err)
 			return
 		}
-		m.transSvc.OnWireMessage(msgType, dec)
+		transSvc.OnWireMessage(msgType, dec)
 	})
-	m.syncSvc.SetOnFileOffer(func(offerID, fileName string, fileSize int64, peerAddr string) {
+	syncSvc.SetOnFileOffer(func(offerID, fileName string, fileSize int64, peerAddr string) {
 		// Use the sender's offer ID so file_accept maps back correctly.
-		m.transSvc.IncomingOfferWithID(offerID, fileName, fileSize, peerAddr)
-		// Auto-accept if the setting is on.
+		transSvc.IncomingOfferWithID(offerID, fileName, fileSize, peerAddr)
+		// Auto-accept if the setting is on.  Keep the network handshake off
+		// the sync event loop.
 		if m.db != nil && m.db.GetDefaulted(storage.KeyAutoAccept) == "true" {
 			saveDir := resolvePath(m.GetReceivedFolder())
-			m.transSvc.AcceptOffer(offerID, saveDir)
+			go func() {
+				if _, err := m.acceptFileOffer(syncSvc, transSvc, offerID, saveDir); err != nil {
+					log.Printf("[mercury] auto-accept %s: %v", offerID, err)
+				}
+				m.notifyChange()
+			}()
 		}
 		m.notifyChange()
 		if m.showWindow != nil {
 			m.showWindow()
 		}
 		// Fire an OS notification so the user knows a file arrived.
-		if m.notifySvc != nil {
-			go m.notifySvc.SendNotification(notifications.NotificationOptions{
-				Title: "Mercury",
-				Body:  fmt.Sprintf("Incoming file: %s (%d MB)", fileName, fileSize/1024/1024+1),
-			})
+		go m.notify("Mercury", fmt.Sprintf("Incoming file: %s (%d MB)", fileName, fileSize/1024/1024+1))
+	})
+	// When a peer accepts our file offer, reply to the address that accepted.
+	syncSvc.SetOnFileAccept(func(offerID, peerAddr string) {
+		fp := transSvc.AcceptNotification(offerID)
+		if fp == "" {
+			return
+		}
+		if peerAddr == "" {
+			log.Printf("[mercury] offer %s accepted without a peer address", offerID)
+			return
+		}
+		log.Printf("[mercury] offer %s accepted by %s, sending %s", offerID, peerAddr, fp)
+		if _, err := transSvc.SendFileForOffer(offerID, peerAddr, fp); err != nil {
+			log.Printf("[mercury] send offer %s: %v", offerID, err)
 		}
 	})
-	// When a peer accepts our file offer, look up the file path and start sending.
-	m.syncSvc.SetOnFileAccept(func(offerID string) {
-		if fp := m.transSvc.AcceptNotification(offerID); fp != "" {
-			log.Printf("[mercury] offer %s accepted, sending %s", offerID, fp)
-			// Take first peer — in practice there's only one sender per offer.
-			peers := m.syncSvc.GetPeers()
-			if len(peers) > 0 {
-				m.transSvc.SendFileForOffer(offerID, peers[0]["addr"], fp)
-			}
-		}
-	})
-
-	if err := m.syncSvc.Start(); err != nil {
-		log.Printf("[mercury] sync start error: %v", err)
-		return
-	}
 
 	// Automatic resync on network change / no-peers.  Refresh the UI after a
 	// resync, but never restart the shared listener mid-transfer (that would
 	// drop the in-flight file stream) — the watcher retries on its next poll.
-	m.syncSvc.SetOnResync(func() {
+	syncSvc.SetOnResync(func() {
 		m.notifyChange()
 	})
-	m.syncSvc.SetResyncAllowed(func() bool {
-		return m.transSvc == nil || len(m.transSvc.AllProgress()) == 0
+	syncSvc.SetResyncAllowed(func() bool {
+		return transSvc == nil || !transSvc.HasActiveTransfers()
 	})
 
+	if err := syncSvc.Start(); err != nil {
+		log.Printf("[mercury] sync start error: %v", err)
+		m.notifyChange()
+		return
+	}
+
 	m.syncClipboardWatch()
+}
+
+// acceptFileOffer starts the receive and tells the offerer to stream.
+func (m *MercuryApp) acceptFileOffer(syncSvc *services.SyncService, transSvc *services.TransferService, offerID, saveDir string) (string, error) {
+	peerAddr := transSvc.OfferPeer(offerID)
+	if peerAddr == "" {
+		return "", fmt.Errorf("offer %s has no sender address", offerID)
+	}
+
+	tid, err := transSvc.AcceptOffer(offerID, saveDir)
+	if err != nil {
+		return "", err
+	}
+	if err := syncSvc.SendFileAccept(peerAddr, offerID); err != nil {
+		log.Printf("[mercury] send accept %s: %v", offerID, err)
+	}
+	go retryAccept(syncSvc, transSvc, peerAddr, offerID, tid)
+	return tid, nil
+}
+
+// retryAccept re-sends the accept until the first chunk arrives.
+func retryAccept(syncSvc *services.SyncService, transSvc *services.TransferService, peerAddr, offerID, tid string) {
+	for _, delay := range []time.Duration{2 * time.Second, 5 * time.Second} {
+		time.Sleep(delay)
+		p := transSvc.Progress(tid)
+		if p == nil || p.Status == "done" || p.Status == "failed" || p.Received > 0 {
+			return
+		}
+		if err := syncSvc.SendFileAccept(peerAddr, offerID); err != nil {
+			log.Printf("[mercury] retry accept %s: %v", offerID, err)
+		}
+	}
 }
 
 func (m *MercuryApp) shouldWatchClipboard() bool {
@@ -216,6 +315,12 @@ func (m *MercuryApp) syncClipboardWatch() {
 }
 
 func (m *MercuryApp) startClipboardWatcher() {
+	syncSvc := m.syncSvc
+	transSvc := m.transSvc
+	if syncSvc == nil || transSvc == nil {
+		return
+	}
+
 	m.clipSvc = services.NewClipboardService()
 	m.clipSvc.Start(func(c clipboard.Change) {
 		if m.db != nil && m.db.IsPaused() {
@@ -225,16 +330,16 @@ func (m *MercuryApp) startClipboardWatcher() {
 		case clipboard.ChangeText:
 			if fi := fileinfo.Detect(c.Text); fi != nil {
 				log.Printf("[mercury] detected file: %s (%d bytes, %s)", fi.Name, fi.Size, fi.Category)
-				id := m.transSvc.NewOfferID()
-				m.transSvc.StoreOutgoing(id, fi.Path)
-				m.syncSvc.BroadcastFileOffer(id, fi.Name, fi.Size)
+				id := transSvc.NewOfferID()
+				transSvc.StoreOutgoing(id, fi.Path)
+				syncSvc.BroadcastFileOffer(id, fi.Name, fi.Size)
 				m.MarkSyncActivity()
 				return
 			}
-			m.syncSvc.BroadcastText(c.Text)
+			syncSvc.BroadcastText(c.Text)
 			m.MarkSyncActivity()
 		case clipboard.ChangeImage:
-			m.syncSvc.BroadcastImage(c.Image)
+			syncSvc.BroadcastImage(c.Image)
 			m.MarkSyncActivity()
 		}
 	})
@@ -351,36 +456,32 @@ func (m *MercuryApp) SetReceivedFolder(path string) {
 	}
 }
 
-// PickReceivedFolder opens a native folder picker dialog and returns the
-// selected path.  Returns empty string if the user cancels.
+// PickReceivedFolder opens the native folder picker and returns the selected
+// path. Returns empty string if the user cancels.
 func (m *MercuryApp) PickReceivedFolder() string {
-	// Try zenity first (Linux), then osascript (macOS).
-	for _, args := range [][]string{
-		{"zenity", "--file-selection", "--directory", "--title=Select received files folder"},
-		{"osascript", "-e", `choose folder with prompt "Select received files folder"`},
-	} {
-		cmd := exec.Command(args[0], args[1:]...)
-		out, err := cmd.Output()
-		if err != nil {
-			continue
-		}
-		p := strings.TrimSpace(string(out))
-		if p != "" && !strings.HasPrefix(p, "FAIL") {
-			// osascript returns "alias Macintosh HD:Users:..." — strip alias prefix
-			if strings.HasPrefix(p, "alias ") {
-				p = strings.TrimPrefix(p, "alias ")
-			}
-			// macOS returns colon-delimited paths; convert to POSIX
-			p = strings.ReplaceAll(p, ":", "/")
-			if !strings.HasPrefix(p, "/") {
-				p = "/" + p
-			}
-			// Store immediately so next GetReceivedFolder returns it.
-			m.SetReceivedFolder(p)
-			return p
-		}
+	wailsApp := application.Get()
+	if wailsApp == nil {
+		return ""
 	}
-	return ""
+
+	dialog := wailsApp.Dialog.OpenFile().
+		SetTitle("Select received files folder").
+		CanChooseDirectories(true).
+		CanChooseFiles(false)
+	if w, ok := wailsApp.Window.GetByName("settings"); ok {
+		dialog.AttachToWindow(w)
+	}
+
+	path, err := dialog.PromptForSingleSelection()
+	if err != nil {
+		log.Printf("[mercury] folder picker: %v", err)
+		return ""
+	}
+	if path == "" {
+		return ""
+	}
+	m.SetReceivedFolder(path)
+	return path
 }
 
 // resolvePath expands a leading ~/ to the current user's home directory.
@@ -402,12 +503,13 @@ func resolvePath(p string) string {
 
 // MarkSyncActivity records that we just sent clipboard data to peers.
 func (m *MercuryApp) MarkSyncActivity() {
-	m.syncAt = time.Now()
+	m.syncAt.Store(time.Now().UnixNano())
 }
 
 // HasRecentSync returns true if clipboard was synced within the last 2 seconds.
 func (m *MercuryApp) HasRecentSync() bool {
-	return time.Since(m.syncAt) < 2*time.Second
+	last := m.syncAt.Load()
+	return last != 0 && time.Since(time.Unix(0, last)) < 2*time.Second
 }
 
 // trayActive returns true when the tray icon should show the active state.
@@ -435,18 +537,20 @@ func (m *MercuryApp) GetPendingFileOffers() []services.FileOffer {
 
 // AcceptFileOffer accepts an incoming file offer and starts receiving.
 func (m *MercuryApp) AcceptFileOffer(offerID string) string {
-	if m.transSvc == nil || m.syncSvc == nil {
+	m.syncMu.Lock()
+	syncSvc, transSvc := m.syncSvc, m.transSvc
+	m.syncMu.Unlock()
+	if syncSvc == nil || transSvc == nil {
 		return ""
 	}
+
 	saveDir := resolvePath(m.GetReceivedFolder())
-	tid, err := m.transSvc.AcceptOffer(offerID, saveDir)
+	tid, err := m.acceptFileOffer(syncSvc, transSvc, offerID, saveDir)
 	if err != nil {
 		log.Printf("[mercury] accept offer: %v", err)
 		return ""
 	}
 	log.Printf("[mercury] accepted offer %s, transfer %s", offerID, tid)
-	// Tell the sender we accepted so they start streaming the file.
-	m.syncSvc.BroadcastFileAccept(offerID)
 	m.notifyChange()
 	return tid
 }
@@ -484,6 +588,14 @@ func (m *MercuryApp) GetTransferProgress() []services.FileProgress {
 func (m *MercuryApp) CancelTransfer(tid string) {
 	if m.transSvc != nil {
 		m.transSvc.CancelTransfer(tid)
+	}
+	m.notifyChange()
+}
+
+// DismissTransfer clears a finished transfer from the dashboard.
+func (m *MercuryApp) DismissTransfer(tid string) {
+	if m.transSvc != nil {
+		m.transSvc.DismissTransfer(tid)
 	}
 	m.notifyChange()
 }

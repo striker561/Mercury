@@ -1,0 +1,44 @@
+name: Install Linux build dependencies
+description: Install GTK 4 and WebKitGTK 6 development packages with bounded apt retries
+
+inputs:
+  extra-packages:
+    description: Additional apt packages
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Install packages
+      shell: bash
+      env:
+        DEBIAN_FRONTEND: noninteractive
+        APT_PACKAGES: build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev ${{ inputs.extra-packages }}
+      run: |
+        set -euo pipefail
+
+        # Hosted runners can start apt timers before the job; stop them so the
+        # install waits on a lock instead of stalling behind an unattended run.
+        sudo systemctl stop --no-block unattended-upgrades apt-daily.timer apt-daily-upgrade.timer 2>/dev/null || true
+
+        apt_opts=(-o DPkg::Lock::Timeout=120 -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::ForceIPv4=true)
+
+        install_packages() {
+          timeout 300 sudo apt-get "${apt_opts[@]}" install -y --no-install-recommends $APT_PACKAGES
+        }
+
+        # Runner images already carry package lists; try the install first so a
+        # slow or unreachable mirror cannot block every job.
+        if install_packages; then
+          exit 0
+        fi
+
+        for attempt in 1 2 3; do
+          if timeout 150 sudo apt-get "${apt_opts[@]}" update && install_packages; then
+            exit 0
+          fi
+          echo "apt attempt ${attempt} failed; retrying in 5s" >&2
+          sleep 5
+        done
+        exit 1

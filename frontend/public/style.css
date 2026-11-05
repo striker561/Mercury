@@ -538,6 +538,10 @@ textarea {
   line-height: 1.45;
 }
 
+.connection-hero-action {
+  margin-top: 10px;
+}
+
 .connection-nodes {
   display: flex;
   align-items: center;
@@ -801,6 +805,10 @@ textarea {
   opacity: 1;
 }
 
+.save-error {
+  color: var(--red);
+}
+
 /* ─── Peer list ─── */
 
 .peer-list {
@@ -856,6 +864,19 @@ textarea {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.peer-status {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-tertiary);
+}
+
+.peer-status.online {
+  background: var(--green);
+  box-shadow: 0 0 4px var(--green-glow);
 }
 
 .peer-addr {
