@@ -108,6 +108,7 @@ export default function FileTransfer({ offers, transfers, onChange }: Props) {
                 <div className="transfer-meta">
                   {formatSize(t.received)} / {formatSize(t.file_size)}
                   {t.speed > 0 ? ` · ${formatSpeed(t.speed)}` : ""}
+                  {failed && t.error ? ` · ${t.error}` : ""}
                 </div>
               </div>
             </div>

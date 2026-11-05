@@ -20,6 +20,7 @@ export interface FileProgress {
   received: number;
   speed: number;
   status: string;
+  error?: string;
 }
 
 export interface DashboardState {

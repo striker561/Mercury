@@ -272,9 +272,24 @@ func (m *MercuryApp) acceptFileOffer(syncSvc *services.SyncService, transSvc *se
 		return "", err
 	}
 	if err := syncSvc.SendFileAccept(peerAddr, offerID); err != nil {
-		return tid, fmt.Errorf("send accept: %w", err)
+		log.Printf("[mercury] send accept %s: %v", offerID, err)
 	}
+	go retryAccept(syncSvc, transSvc, peerAddr, offerID, tid)
 	return tid, nil
+}
+
+// retryAccept re-sends the accept until the first chunk arrives.
+func retryAccept(syncSvc *services.SyncService, transSvc *services.TransferService, peerAddr, offerID, tid string) {
+	for _, delay := range []time.Duration{2 * time.Second, 5 * time.Second} {
+		time.Sleep(delay)
+		p := transSvc.Progress(tid)
+		if p == nil || p.Status == "done" || p.Status == "failed" || p.Received > 0 {
+			return
+		}
+		if err := syncSvc.SendFileAccept(peerAddr, offerID); err != nil {
+			log.Printf("[mercury] retry accept %s: %v", offerID, err)
+		}
+	}
 }
 
 func (m *MercuryApp) shouldWatchClipboard() bool {
