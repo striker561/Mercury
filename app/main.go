@@ -221,29 +221,61 @@ func isDarwinDev() bool {
 	return !strings.Contains(filepath.ToSlash(exe), ".app/Contents/MacOS/")
 }
 
-// Temporary: WebKitGTK cannot create an EGL context on COSMIC Wayland with
-// NVIDIA (Wails #4985). Remove when the upstream stack handles it.
-const linuxX11Fallback = true
+// Temporary: Wails v3.1.0 stopped applying WebKitGTK's NVIDIA DMA-BUF workaround
+// on hybrid Wayland, and GTK4's GL renderer aborts when EGL is unavailable.
+// Remove when upstream handles both.
+const linuxRenderFallback = true
 
 func configureLinuxRenderer() {
-	if !linuxX11Fallback {
+	if !linuxRenderFallback || runtime.GOOS != "linux" {
 		return
 	}
-	_, nvidiaErr := os.Stat("/sys/module/nvidia")
-	if !needsX11Backend(runtime.GOOS, os.Getenv("GDK_BACKEND"), os.Getenv("XDG_SESSION_TYPE"), os.Getenv("WAYLAND_DISPLAY"), os.Getenv("XDG_CURRENT_DESKTOP"), nvidiaErr == nil) {
+	hasNvidia := hasNVIDIA()
+	if hasNvidia && os.Getenv("WEBKIT_DISABLE_DMABUF_RENDERER") == "" {
+		_ = os.Setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
+	}
+
+	sessionType := os.Getenv("XDG_SESSION_TYPE")
+	waylandDisplay := os.Getenv("WAYLAND_DISPLAY")
+	desktop := os.Getenv("XDG_CURRENT_DESKTOP")
+	gskRenderer := os.Getenv("GSK_RENDERER")
+	force := os.Getenv("MERCURY_FORCE_CAIRO") != ""
+
+	if waylandDisplay != "" || sessionType == "wayland" || force {
+		log.Printf("[mercury] renderer check: session=%q desktop=%q gdk=%q gsk=%q wayland=%q nvidia=%v force=%v",
+			sessionType, desktop, os.Getenv("GDK_BACKEND"), gskRenderer, waylandDisplay, hasNvidia, force)
+	}
+	if !needsCairoRenderer(runtime.GOOS, gskRenderer, sessionType, waylandDisplay, desktop, hasNvidia, force) {
 		return
 	}
-	_ = os.Setenv("GDK_BACKEND", "x11")
-	log.Println("[mercury] COSMIC + NVIDIA Wayland detected; using X11 backend")
+	_ = os.Setenv("GSK_RENDERER", "cairo")
+	if force {
+		log.Println("[mercury] MERCURY_FORCE_CAIRO set; using GTK Cairo renderer")
+	} else {
+		log.Println("[mercury] COSMIC NVIDIA Wayland detected; using GTK Cairo renderer")
+	}
 }
 
-func needsX11Backend(goos, gdkBackend, sessionType, waylandDisplay, desktop string, hasNVIDIA bool) bool {
+func needsCairoRenderer(goos, gskRenderer, sessionType, waylandDisplay, desktop string, hasNVIDIA, force bool) bool {
+	if goos != "linux" {
+		return false
+	}
+	if force {
+		return true
+	}
 	wayland := sessionType == "wayland" || waylandDisplay != ""
-	return goos == "linux" &&
-		gdkBackend == "" &&
-		strings.Contains(strings.ToUpper(desktop), "COSMIC") &&
-		wayland &&
-		hasNVIDIA
+	desktop = strings.ToUpper(desktop)
+	return gskRenderer == "" && wayland && hasNVIDIA &&
+		(strings.Contains(desktop, "COSMIC") || strings.Contains(desktop, "POP"))
+}
+
+func hasNVIDIA() bool {
+	for _, path := range []string{"/sys/module/nvidia", "/proc/driver/nvidia/version", "/dev/nvidia0"} {
+		if _, err := os.Stat(path); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // detectGNOME checks if we're running under the GNOME desktop environment.
