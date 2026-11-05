@@ -63,6 +63,7 @@ export const copy = {
     decline: "Decline",
     accept: "Accept",
     cancel: "Cancel",
+    dismiss: "Dismiss",
   },
 
   settings: {

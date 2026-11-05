@@ -56,6 +56,14 @@ export default function FileTransfer({ offers, transfers, onChange }: Props) {
     [onChange],
   );
 
+  const dismiss = useCallback(
+    async (id: string) => {
+      await MercuryApp.DismissTransfer(id);
+      onChange();
+    },
+    [onChange],
+  );
+
   if (!offers.length && !transfers.length) return null;
 
   return (
@@ -129,6 +137,17 @@ export default function FileTransfer({ offers, transfers, onChange }: Props) {
                   onClick={() => cancel(t.id)}
                 >
                   {copy.transfers.cancel}
+                </button>
+              </div>
+            )}
+            {!busy && failed && (
+              <div className="progress-footer">
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => dismiss(t.id)}
+                >
+                  {copy.transfers.dismiss}
                 </button>
               </div>
             )}
