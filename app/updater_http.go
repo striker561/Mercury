@@ -30,9 +30,9 @@ func (t retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		if req.Context().Err() != nil {
 			return nil, err
 		}
-		log.Printf("[mercury] updater request failed for %s: %v (retrying once)", req.URL, err)
+		log.Printf("[mercury] updater request failed for %s: %v (retrying once)", updaterRequestURL(req), err)
 	} else {
-		log.Printf("[mercury] updater HTTP %d for %s (retrying once)", resp.StatusCode, req.URL)
+		log.Printf("[mercury] updater HTTP %d for %s (retrying once)", resp.StatusCode, updaterRequestURL(req))
 		drainAndClose(resp)
 	}
 
@@ -47,10 +47,20 @@ func (t retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	retryResp, retryErr := t.roundTrip(req.Clone(req.Context()))
-	if retryErr == nil && retryResp.StatusCode >= 500 {
-		log.Printf("[mercury] updater HTTP %d for %s after retry", retryResp.StatusCode, req.URL)
+	if retryErr != nil {
+		log.Printf("[mercury] updater request failed for %s after retry: %v", updaterRequestURL(req), retryErr)
+	} else if retryResp.StatusCode >= 500 {
+		log.Printf("[mercury] updater HTTP %d for %s after retry", retryResp.StatusCode, updaterRequestURL(req))
 	}
 	return retryResp, retryErr
+}
+
+func updaterRequestURL(req *http.Request) string {
+	u := *req.URL
+	u.RawQuery = ""
+	u.Fragment = ""
+	u.User = nil
+	return u.String()
 }
 
 func (t retryTransport) roundTrip(req *http.Request) (*http.Response, error) {

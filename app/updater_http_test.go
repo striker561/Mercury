@@ -35,6 +35,16 @@ func TestRetryTransportRetriesOnceOn5xx(t *testing.T) {
 	}
 }
 
+func TestUpdaterRequestURLStripsQuery(t *testing.T) {
+	req, err := http.NewRequest(http.MethodGet, "https://example.com/asset?X-Amz-Signature=secret", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := updaterRequestURL(req), "https://example.com/asset"; got != want {
+		t.Fatalf("updaterRequestURL() = %q, want %q", got, want)
+	}
+}
+
 func TestRetryTransportDoesNotRetry4xx(t *testing.T) {
 	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

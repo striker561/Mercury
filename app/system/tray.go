@@ -90,8 +90,12 @@ func updateResultLabel(err error, state updater.State) string {
 		}
 		return "Update failed: " + msg
 	}
-	if state == updater.StateReady {
+	switch state {
+	case updater.StateReady:
 		return "Update ready — restart Mercury"
+	case updater.StateAvailable, updater.StateDownloading, updater.StateVerifying, updater.StateInstalling:
+		return "Update in progress…"
+	default:
+		return "Up to date"
 	}
-	return "Up to date"
 }
