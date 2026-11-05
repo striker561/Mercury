@@ -3,9 +3,11 @@ package system
 import (
 	"context"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/updater"
 )
 
 // MenuRefs holds live menu items so the caller can update labels/actions.
@@ -17,7 +19,7 @@ type MenuRefs struct {
 
 // BuildMenu creates the right-click context menu for the system tray.
 // Returns references to dynamic items so the caller can update them.
-func BuildMenu(app *application.App, showFn func()) (*application.Menu, *MenuRefs) {
+func BuildMenu(app *application.App, showFn, onUpdateChecked func()) (*application.Menu, *MenuRefs) {
 	menu := application.NewMenu()
 
 	// App name header (disabled)
@@ -50,11 +52,17 @@ func BuildMenu(app *application.App, showFn func()) (*application.Menu, *MenuRef
 	// Check for updates
 	checkItem := menu.Add("Check for Updates…")
 	checkItem.OnClick(func(ctx *application.Context) {
+		checkItem.SetLabel("Checking for updates…")
 		go func() {
 			checkCtx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 			defer cancel()
-			if err := app.Updater.CheckAndInstall(checkCtx); err != nil {
+			err := app.Updater.CheckAndInstall(checkCtx)
+			if err != nil {
 				log.Printf("[mercury] update install: %v", err)
+			}
+			checkItem.SetLabel(updateResultLabel(err, app.Updater.State()))
+			if onUpdateChecked != nil {
+				onUpdateChecked()
 			}
 		}()
 	})
@@ -72,4 +80,18 @@ func BuildMenu(app *application.App, showFn func()) (*application.Menu, *MenuRef
 		Pause:    pauseItem,
 		CheckUpd: checkItem,
 	}
+}
+
+func updateResultLabel(err error, state updater.State) string {
+	if err != nil {
+		msg := strings.SplitN(err.Error(), "\n", 2)[0]
+		if len(msg) > 60 {
+			msg = msg[:60] + "…"
+		}
+		return "Update failed: " + msg
+	}
+	if state == updater.StateReady {
+		return "Update ready — restart Mercury"
+	}
+	return "Up to date"
 }

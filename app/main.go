@@ -47,6 +47,7 @@ func Run(assets embed.FS) error {
 	}
 
 	var settingsWindow *application.WebviewWindow
+	var showSettings func()
 
 	app := application.New(application.Options{
 		Name:        "Mercury",
@@ -59,10 +60,8 @@ func Run(assets embed.FS) error {
 			UniqueID: singleInstanceID,
 			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
 				log.Printf("[mercury] second instance launch args=%v", data.Args)
-				if settingsWindow != nil {
-					settingsWindow.Restore()
-					settingsWindow.Show()
-					settingsWindow.Focus()
+				if showSettings != nil {
+					showSettings()
 				}
 			},
 			ExitCode: 0,
@@ -86,7 +85,7 @@ func Run(assets embed.FS) error {
 	if err := configureUpdater(app); err != nil {
 		return err
 	}
-	startSilentUpdateCheck(app, mercuryApp.notify)
+	startSilentUpdateCheck(app, mercuryApp)
 
 	// Create the settings window (hidden by default, shown on tray click).
 	settingsWindow = app.Window.NewWithOptions(application.WebviewWindowOptions{
@@ -105,14 +104,27 @@ func Run(assets embed.FS) error {
 		},
 	})
 
-	toggleWindow := func() {
-		if settingsWindow.IsVisible() && !settingsWindow.IsMinimised() {
-			settingsWindow.Hide()
-		} else {
-			settingsWindow.Restore()
-			settingsWindow.Show()
-			settingsWindow.Focus()
+	showSettings = func() {
+		if settingsWindow == nil {
+			return
 		}
+		app.Show()
+		settingsWindow.Restore()
+		settingsWindow.Show()
+		settingsWindow.Focus()
+	}
+
+	toggleWindow := func() {
+		if !settingsWindow.IsVisible() {
+			showSettings()
+			return
+		}
+		if !settingsWindow.IsFocused() {
+			settingsWindow.Restore()
+			settingsWindow.Focus()
+			return
+		}
+		settingsWindow.Hide()
 	}
 
 	// Hide instead of close — we're a tray app, closing should keep us running.
@@ -131,11 +143,7 @@ func Run(assets embed.FS) error {
 	}
 
 	// Wire window show/hide so file offers can pop open the settings.
-	mercuryApp.setShowWindow(func() {
-		settingsWindow.Restore()
-		settingsWindow.Show()
-		settingsWindow.Focus()
-	})
+	mercuryApp.setShowWindow(showSettings)
 	mercuryApp.setHideWindow(func() {
 		settingsWindow.Hide()
 	})
@@ -144,11 +152,7 @@ func Run(assets embed.FS) error {
 	// the tray item is invisible in the menu bar).
 	tray := app.SystemTray.New()
 
-	menu, refs := system.BuildMenu(app, func() {
-		settingsWindow.Restore()
-		settingsWindow.Show()
-		settingsWindow.Focus()
-	})
+	menu, refs := system.BuildMenu(app, showSettings, mercuryApp.markUpdateChecked)
 	tray.SetMenu(menu)
 
 	// Left-click toggles the window; right-click opens the tray menu.

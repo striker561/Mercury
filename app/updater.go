@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
+
+	"mercury/app/backend/storage"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/updater"
@@ -16,6 +19,7 @@ import (
 const (
 	githubRepository = "striker561/Mercury"
 	checksumAsset    = "SHA256SUMS"
+	updateCheckEvery = 24 * time.Hour
 
 	updaterAssetDarwin  = "mercury_darwin_universal.zip"
 	updaterAssetLinux   = "mercury_linux_amd64"
@@ -59,7 +63,7 @@ func configureUpdater(app *application.App) error {
 		Repository:    githubRepository,
 		ChecksumAsset: checksumAsset,
 		AssetMatcher:  mercuryAssetMatcher,
-		HTTPClient:    &http.Client{Timeout: 10 * time.Minute},
+		HTTPClient:    &http.Client{Timeout: 10 * time.Minute, Transport: retryTransport{}},
 	})
 	if err != nil {
 		return fmt.Errorf("updater provider: %w", err)
@@ -71,14 +75,22 @@ func configureUpdater(app *application.App) error {
 	})
 }
 
-func startSilentUpdateCheck(app *application.App, notify func(title, body string)) {
+func startSilentUpdateCheck(app *application.App, mercuryApp *MercuryApp) {
+	if mercuryApp == nil || !mercuryApp.updateCheckDue() {
+		return
+	}
+
 	go func() {
 		time.Sleep(10 * time.Minute)
+		if !mercuryApp.updateCheckDue() {
+			return
+		}
 
 		ctx, cancel := context.WithTimeout(app.Context(), 20*time.Second)
 		defer cancel()
 
 		rel, err := app.Updater.Check(ctx)
+		mercuryApp.markUpdateChecked()
 		if err != nil {
 			log.Printf("[mercury] update check: %v", err)
 			return
@@ -86,8 +98,30 @@ func startSilentUpdateCheck(app *application.App, notify func(title, body string
 		if rel == nil {
 			return
 		}
-		if notify != nil {
-			notify("Mercury", fmt.Sprintf("Version %s is available — use Check for Updates in the tray menu.", rel.Version))
-		}
+		mercuryApp.notify("Mercury", fmt.Sprintf("Version %s is available — use Check for Updates in the tray menu.", rel.Version))
 	}()
+}
+
+func updateCheckDue(last string, now time.Time) bool {
+	if last == "" {
+		return true
+	}
+	sec, err := strconv.ParseInt(last, 10, 64)
+	if err != nil || sec <= 0 {
+		return true
+	}
+	return now.Sub(time.Unix(sec, 0)) >= updateCheckEvery
+}
+
+func (m *MercuryApp) updateCheckDue() bool {
+	if m.db == nil {
+		return true
+	}
+	return updateCheckDue(m.db.GetDefaulted(storage.KeyLastUpdateCheck), time.Now())
+}
+
+func (m *MercuryApp) markUpdateChecked() {
+	if m.db != nil {
+		m.db.Set(storage.KeyLastUpdateCheck, strconv.FormatInt(time.Now().Unix(), 10))
+	}
 }
