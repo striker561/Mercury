@@ -22,9 +22,8 @@ jobs:
           bun-version: latest
 
       - name: Install system deps
-        run: |
-          sudo apt update
-          sudo apt install -y build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev
+        uses: ./.github/actions/linux-deps
+        timeout-minutes: 10
 
       - name: Install Wails v3
         run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0

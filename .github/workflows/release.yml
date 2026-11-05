@@ -43,9 +43,8 @@ jobs:
           bun-version: latest
 
       - name: Install system deps
-        run: |
-          sudo apt update
-          sudo apt install -y build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev
+        uses: ./.github/actions/linux-deps
+        timeout-minutes: 10
 
       - name: Cache frontend dependencies
         uses: actions/cache@v4
@@ -93,9 +92,10 @@ jobs:
           bun-version: latest
 
       - name: Install system deps
-        run: |
-          sudo apt update
-          sudo apt install -y build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev libayatana-appindicator3-dev
+        uses: ./.github/actions/linux-deps
+        with:
+          extra-packages: libayatana-appindicator3-dev
+        timeout-minutes: 10
 
       - name: Cache frontend dependencies
         uses: actions/cache@v4
