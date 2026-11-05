@@ -38,18 +38,18 @@ type MercuryApp struct {
 	gnomeTray  bool         // GNOME detected — tray may need AppIndicator
 }
 
-// SetShowWindow registers a callback to show the settings window.
-func (m *MercuryApp) SetShowWindow(fn func()) {
+// setShowWindow registers a callback to show the settings window.
+func (m *MercuryApp) setShowWindow(fn func()) {
 	m.showWindow = fn
 }
 
-// SetHideWindow registers a callback to hide the settings window.
-func (m *MercuryApp) SetHideWindow(fn func()) {
+// setHideWindow registers a callback to hide the settings window.
+func (m *MercuryApp) setHideWindow(fn func()) {
 	m.hideWindow = fn
 }
 
-// SetEmitChange registers a callback invoked when dashboard state changes.
-func (m *MercuryApp) SetEmitChange(fn func()) {
+// setEmitChange registers a callback invoked when dashboard state changes.
+func (m *MercuryApp) setEmitChange(fn func()) {
 	m.emitChange = fn
 }
 
@@ -60,8 +60,8 @@ func (m *MercuryApp) HideWindow() {
 	}
 }
 
-// SetNotifier stores the notification service for OS-level alerts.
-func (m *MercuryApp) SetNotifier(ns *notifications.NotificationService) {
+// setNotifier stores the notification service for OS-level alerts.
+func (m *MercuryApp) setNotifier(ns *notifications.NotificationService) {
 	m.notifySvc = ns
 }
 
@@ -104,13 +104,13 @@ func appleScriptQuote(s string) string {
 	return `"` + s + `"`
 }
 
-// SetGNOMETrayTip marks that the app is running under GNOME.
-func (m *MercuryApp) SetGNOMETrayTip(enabled bool) {
+// setGNOMETrayTip marks that the app is running under GNOME.
+func (m *MercuryApp) setGNOMETrayTip(enabled bool) {
 	m.gnomeTray = enabled
 }
 
-// SetAutostartManager stores the OS autostart manager.
-func (m *MercuryApp) SetAutostartManager(am *application.AutostartManager) {
+// setAutostartManager stores the OS autostart manager.
+func (m *MercuryApp) setAutostartManager(am *application.AutostartManager) {
 	m.autostart = am
 }
 
@@ -456,36 +456,32 @@ func (m *MercuryApp) SetReceivedFolder(path string) {
 	}
 }
 
-// PickReceivedFolder opens a native folder picker dialog and returns the
-// selected path.  Returns empty string if the user cancels.
+// PickReceivedFolder opens the native folder picker and returns the selected
+// path. Returns empty string if the user cancels.
 func (m *MercuryApp) PickReceivedFolder() string {
-	// Try zenity first (Linux), then osascript (macOS).
-	for _, args := range [][]string{
-		{"zenity", "--file-selection", "--directory", "--title=Select received files folder"},
-		{"osascript", "-e", `choose folder with prompt "Select received files folder"`},
-	} {
-		cmd := exec.Command(args[0], args[1:]...)
-		out, err := cmd.Output()
-		if err != nil {
-			continue
-		}
-		p := strings.TrimSpace(string(out))
-		if p != "" && !strings.HasPrefix(p, "FAIL") {
-			// osascript returns "alias Macintosh HD:Users:..." — strip alias prefix
-			if strings.HasPrefix(p, "alias ") {
-				p = strings.TrimPrefix(p, "alias ")
-			}
-			// macOS returns colon-delimited paths; convert to POSIX
-			p = strings.ReplaceAll(p, ":", "/")
-			if !strings.HasPrefix(p, "/") {
-				p = "/" + p
-			}
-			// Store immediately so next GetReceivedFolder returns it.
-			m.SetReceivedFolder(p)
-			return p
-		}
+	wailsApp := application.Get()
+	if wailsApp == nil {
+		return ""
 	}
-	return ""
+
+	dialog := wailsApp.Dialog.OpenFile().
+		SetTitle("Select received files folder").
+		CanChooseDirectories(true).
+		CanChooseFiles(false)
+	if w, ok := wailsApp.Window.GetByName("settings"); ok {
+		dialog.AttachToWindow(w)
+	}
+
+	path, err := dialog.PromptForSingleSelection()
+	if err != nil {
+		log.Printf("[mercury] folder picker: %v", err)
+		return ""
+	}
+	if path == "" {
+		return ""
+	}
+	m.SetReceivedFolder(path)
+	return path
 }
 
 // resolvePath expands a leading ~/ to the current user's home directory.

@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -26,7 +27,7 @@ func Run(assets embed.FS) error {
 
 	mercuryApp := NewMercuryApp()
 	if isGNOME {
-		mercuryApp.SetGNOMETrayTip(true)
+		mercuryApp.setGNOMETrayTip(true)
 	}
 
 	// Create notification service for OS-level file offer alerts.
@@ -40,7 +41,7 @@ func Run(assets embed.FS) error {
 	}
 	if !isDarwinDev() {
 		svcs = append(svcs, application.NewService(notifySvc))
-		mercuryApp.SetNotifier(notifySvc)
+		mercuryApp.setNotifier(notifySvc)
 	} else {
 		log.Println("[mercury] notification service unavailable (dev mode — using osascript)")
 	}
@@ -59,6 +60,7 @@ func Run(assets embed.FS) error {
 			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
 				log.Printf("[mercury] second instance launch args=%v", data.Args)
 				if settingsWindow != nil {
+					settingsWindow.Restore()
 					settingsWindow.Show()
 					settingsWindow.Focus()
 				}
@@ -69,10 +71,16 @@ func Run(assets embed.FS) error {
 			ActivationPolicy: application.ActivationPolicyAccessory,
 			ApplicationShouldTerminateAfterLastWindowClosed: false,
 		},
+		Windows: application.WindowsOptions{
+			DisableQuitOnLastWindowClosed: true,
+		},
+		Linux: application.LinuxOptions{
+			DisableQuitOnLastWindowClosed: true,
+		},
 	})
 
 	// Wire the autostart manager so the "Start on login" setting works.
-	mercuryApp.SetAutostartManager(app.Autostart)
+	mercuryApp.setAutostartManager(app.Autostart)
 
 	// Wire the in-app updater against GitHub Releases.
 	if err := configureUpdater(app); err != nil {
@@ -98,9 +106,10 @@ func Run(assets embed.FS) error {
 	})
 
 	toggleWindow := func() {
-		if settingsWindow.IsVisible() {
+		if settingsWindow.IsVisible() && !settingsWindow.IsMinimised() {
 			settingsWindow.Hide()
 		} else {
+			settingsWindow.Restore()
 			settingsWindow.Show()
 			settingsWindow.Focus()
 		}
@@ -122,22 +131,21 @@ func Run(assets embed.FS) error {
 	}
 
 	// Wire window show/hide so file offers can pop open the settings.
-	mercuryApp.SetShowWindow(func() {
+	mercuryApp.setShowWindow(func() {
+		settingsWindow.Restore()
 		settingsWindow.Show()
 		settingsWindow.Focus()
 	})
-	mercuryApp.SetHideWindow(func() {
+	mercuryApp.setHideWindow(func() {
 		settingsWindow.Hide()
 	})
 
 	// Create the system tray with an icon (required on macOS — without one,
 	// the tray item is invisible in the menu bar).
 	tray := app.SystemTray.New()
-	tray.SetTemplateIcon(trayIconWhite)
-	tray.SetDarkModeIcon(trayIconWhite)
-	tray.SetIcon(trayIconWhite)
 
 	menu, refs := system.BuildMenu(app, func() {
+		settingsWindow.Restore()
 		settingsWindow.Show()
 		settingsWindow.Focus()
 	})
@@ -146,7 +154,7 @@ func Run(assets embed.FS) error {
 	// Left-click toggles the window; right-click opens the tray menu.
 	tray.OnClick(toggleWindow)
 
-	mercuryApp.SetEmitChange(func() {
+	mercuryApp.setEmitChange(func() {
 		app.Event.Emit("dashboard:changed")
 		updateTray(tray, refs, mercuryApp)
 	})
@@ -215,27 +223,40 @@ func detectGNOME() bool {
 	return strings.Contains(desktop, "gnome") || strings.Contains(session, "gnome")
 }
 
+func setTrayIcon(tray *application.SystemTray, active bool) {
+	icon := trayIconWhite
+	if active {
+		icon = trayIconActiveWhite
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		tray.SetTemplateIcon(icon)
+	case "windows":
+		tray.SetIcon(icon)
+		tray.SetDarkModeIcon(icon)
+	default:
+		tray.SetIcon(icon)
+	}
+}
+
 // updateTray refreshes the tray icon and status label from current app state.
 func updateTray(tray *application.SystemTray, refs *system.MenuRefs, mercuryApp *MercuryApp) {
-	if mercuryApp.trayActive() {
-		tray.SetTemplateIcon(trayIconActiveWhite)
-		tray.SetDarkModeIcon(trayIconActiveWhite)
-		tray.SetIcon(trayIconActiveWhite)
-	} else {
-		tray.SetTemplateIcon(trayIconWhite)
-		tray.SetDarkModeIcon(trayIconWhite)
-		tray.SetIcon(trayIconWhite)
-	}
-
+	active := mercuryApp.trayActive()
 	n := mercuryApp.GetPeerCount()
 	paused := mercuryApp.IsPaused()
 	var status string
 	if paused {
 		status = "⏸ Resting"
 	} else if n > 0 {
-		status = fmt.Sprintf("● In service (%d peer%s)", n, map[bool]string{true: "", false: "s"}[n == 1])
+		peerSuffix := "s"
+		if n == 1 {
+			peerSuffix = ""
+		}
+		status = fmt.Sprintf("● In service (%d peer%s)", n, peerSuffix)
 	} else {
 		status = "○ Awaiting fleet"
 	}
+
+	setTrayIcon(tray, active)
 	refs.Status.SetLabel(status)
 }
