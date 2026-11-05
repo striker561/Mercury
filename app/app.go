@@ -591,3 +591,11 @@ func (m *MercuryApp) CancelTransfer(tid string) {
 	}
 	m.notifyChange()
 }
+
+// DismissTransfer clears a finished transfer from the dashboard.
+func (m *MercuryApp) DismissTransfer(tid string) {
+	if m.transSvc != nil {
+		m.transSvc.DismissTransfer(tid)
+	}
+	m.notifyChange()
+}

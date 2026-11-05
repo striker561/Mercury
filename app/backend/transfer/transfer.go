@@ -426,6 +426,16 @@ func (m *Manager) CancelTransfer(tid string) {
 	}
 }
 
+// DismissTransfer removes a finished transfer from the dashboard. Active
+// transfers are left alone; cancel them first.
+func (m *Manager) DismissTransfer(tid string) {
+	m.mu.Lock()
+	if p, ok := m.transfers[tid]; ok && (p.Status == StatusDone || p.Status == StatusFailed) {
+		delete(m.transfers, tid)
+	}
+	m.mu.Unlock()
+}
+
 // updateStatus is a helper used by sendFile / receiveFile.
 func (m *Manager) updateStatus(tid string, s Status, received int64) {
 	m.mu.Lock()

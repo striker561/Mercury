@@ -100,3 +100,8 @@ func (s *TransferService) HasActiveTransfers() bool {
 func (s *TransferService) CancelTransfer(tid string) {
 	s.mgr.CancelTransfer(tid)
 }
+
+// DismissTransfer removes a finished transfer from the dashboard.
+func (s *TransferService) DismissTransfer(tid string) {
+	s.mgr.DismissTransfer(tid)
+}
