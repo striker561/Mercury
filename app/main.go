@@ -249,18 +249,18 @@ func configureLinuxRenderer() {
 		log.Printf("[mercury] renderer check: session=%q desktop=%q gdk=%q gsk=%q wayland=%q nvidia=%v force=%v",
 			sessionType, desktop, os.Getenv("GDK_BACKEND"), gskRenderer, waylandDisplay, hasNvidia, force)
 	}
-	if !needsCairoRenderer(runtime.GOOS, gskRenderer, sessionType, waylandDisplay, desktop, hasNvidia, force) {
+	if !needsCairoRenderer(runtime.GOOS, gskRenderer, sessionType, waylandDisplay, hasNvidia, force) {
 		return
 	}
 	_ = os.Setenv("GSK_RENDERER", "cairo")
 	if force {
 		log.Println("[mercury] MERCURY_FORCE_CAIRO set; using GTK Cairo renderer")
 	} else {
-		log.Println("[mercury] COSMIC NVIDIA Wayland detected; using GTK Cairo renderer")
+		log.Println("[mercury] NVIDIA Wayland detected; using GTK Cairo renderer")
 	}
 }
 
-func needsCairoRenderer(goos, gskRenderer, sessionType, waylandDisplay, desktop string, hasNVIDIA, force bool) bool {
+func needsCairoRenderer(goos, gskRenderer, sessionType, waylandDisplay string, hasNVIDIA, force bool) bool {
 	if goos != "linux" {
 		return false
 	}
@@ -268,9 +268,7 @@ func needsCairoRenderer(goos, gskRenderer, sessionType, waylandDisplay, desktop 
 		return true
 	}
 	wayland := sessionType == "wayland" || waylandDisplay != ""
-	desktop = strings.ToUpper(desktop)
-	return gskRenderer == "" && wayland && hasNVIDIA &&
-		(strings.Contains(desktop, "COSMIC") || strings.Contains(desktop, "POP"))
+	return gskRenderer == "" && wayland && hasNVIDIA
 }
 
 func hasNVIDIA() bool {
