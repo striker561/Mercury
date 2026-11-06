@@ -24,18 +24,20 @@ import (
 
 // MercuryApp is the main application struct exposed to the Wails frontend.
 type MercuryApp struct {
-	syncMu     sync.Mutex
-	syncSvc    *services.SyncService
-	clipSvc    *services.ClipboardService
-	db         *storage.DB
-	transSvc   *services.TransferService
-	showWindow func()
-	hideWindow func()
-	emitChange func()
-	notifySvc  *notifications.NotificationService
-	autostart  *application.AutostartManager
-	syncAt     atomic.Int64 // unix nanos of the last clipboard sync
-	gnomeTray  bool         // GNOME detected — tray may need AppIndicator
+	syncMu               sync.Mutex
+	syncSvc              *services.SyncService
+	clipSvc              *services.ClipboardService
+	db                   *storage.DB
+	transSvc             *services.TransferService
+	showWindow           func()
+	hideWindow           func()
+	emitChange           func()
+	fileOfferUI          func()
+	notifySvc            *notifications.NotificationService
+	autostart            *application.AutostartManager
+	syncAt               atomic.Int64 // unix nanos of the last clipboard sync
+	clipboardUnavailable atomic.Bool
+	gnomeTray            bool // GNOME detected — tray may need AppIndicator
 }
 
 // setShowWindow registers a callback to show the settings window.
@@ -51,6 +53,11 @@ func (m *MercuryApp) setHideWindow(fn func()) {
 // setEmitChange registers a callback invoked when dashboard state changes.
 func (m *MercuryApp) setEmitChange(fn func()) {
 	m.emitChange = fn
+}
+
+// setFileOfferUI registers a callback that moves the UI to the Home page.
+func (m *MercuryApp) setFileOfferUI(fn func()) {
+	m.fileOfferUI = fn
 }
 
 // HideWindow hides the settings window (tray app stays running).
@@ -172,8 +179,10 @@ func (m *MercuryApp) startSyncLocked(passphrase string) {
 	log.Printf("[mercury] starting sync")
 
 	if err := goclipboard.Init(); err != nil {
-		log.Printf("[mercury] clipboard init error: %v", err)
-		return
+		log.Printf("[mercury] clipboard unavailable: %v", err)
+		m.clipboardUnavailable.Store(true)
+	} else {
+		m.clipboardUnavailable.Store(false)
 	}
 
 	if m.syncSvc != nil {
@@ -181,9 +190,11 @@ func (m *MercuryApp) startSyncLocked(passphrase string) {
 	}
 	if m.clipSvc != nil {
 		m.clipSvc.Stop()
+		m.clipSvc = nil
 	}
 
 	syncSvc := services.NewSyncService(passphrase, storage.EnsureDeviceID(m.db))
+	syncSvc.SetClipboardAvailable(!m.clipboardUnavailable.Load())
 	m.syncSvc = syncSvc
 
 	// Wire the shared TCP listener: sync handles clipboard, transfer handles
@@ -195,6 +206,7 @@ func (m *MercuryApp) startSyncLocked(passphrase string) {
 	key := services.DeriveKey(passphrase)
 	transSvc := services.NewTransferService(key)
 	m.transSvc = transSvc
+	transSvc.CleanupStaleParts(resolvePath(m.GetReceivedFolder()))
 
 	syncSvc.SetOnMessage(func(msgType byte, payload []byte, _ string) {
 		dec, err := crypto.Decrypt(payload, key)
@@ -205,6 +217,10 @@ func (m *MercuryApp) startSyncLocked(passphrase string) {
 		transSvc.OnWireMessage(msgType, dec)
 	})
 	syncSvc.SetOnFileOffer(func(offerID, fileName string, fileSize int64, peerAddr string) {
+		if m.db != nil && !m.db.IsFilesAllowed() {
+			log.Printf("[mercury] file offer %s ignored (accept files off)", offerID)
+			return
+		}
 		// Use the sender's offer ID so file_accept maps back correctly.
 		transSvc.IncomingOfferWithID(offerID, fileName, fileSize, peerAddr)
 		// Auto-accept if the setting is on.  Keep the network handshake off
@@ -219,6 +235,9 @@ func (m *MercuryApp) startSyncLocked(passphrase string) {
 			}()
 		}
 		m.notifyChange()
+		if m.fileOfferUI != nil {
+			m.fileOfferUI()
+		}
 		if m.showWindow != nil {
 			m.showWindow()
 		}
@@ -302,6 +321,13 @@ func (m *MercuryApp) shouldWatchClipboard() bool {
 // syncClipboardWatch starts clipboard monitoring only when peers are connected.
 // No passphrase, no peers, or paused — Mercury rests. No polling.
 func (m *MercuryApp) syncClipboardWatch() {
+	if m.clipboardUnavailable.Load() {
+		if m.clipSvc != nil {
+			m.clipSvc.Stop()
+			m.clipSvc = nil
+		}
+		return
+	}
 	if !m.shouldWatchClipboard() {
 		if m.clipSvc != nil {
 			m.clipSvc.Stop()
@@ -315,6 +341,9 @@ func (m *MercuryApp) syncClipboardWatch() {
 }
 
 func (m *MercuryApp) startClipboardWatcher() {
+	if m.clipboardUnavailable.Load() {
+		return
+	}
 	syncSvc := m.syncSvc
 	transSvc := m.transSvc
 	if syncSvc == nil || transSvc == nil {
@@ -424,8 +453,11 @@ func (m *MercuryApp) SetSetting(key, value string) {
 		m.db.Set(key, value)
 	}
 	// Special handling for settings that need runtime action.
-	if key == storage.KeyAllowFiles && value == "false" && m.clipSvc != nil {
-		m.clipSvc.Pause()
+	if key == storage.KeyAllowFiles && value != "true" && m.transSvc != nil {
+		for _, offer := range m.transSvc.PendingOffers() {
+			m.transSvc.RejectOffer(offer.ID)
+		}
+		m.notifyChange()
 	}
 	if key == storage.KeyAutostart && m.autostart != nil {
 		if value == "true" {
@@ -537,6 +569,9 @@ func (m *MercuryApp) GetPendingFileOffers() []services.FileOffer {
 
 // AcceptFileOffer accepts an incoming file offer and starts receiving.
 func (m *MercuryApp) AcceptFileOffer(offerID string) string {
+	if m.db != nil && !m.db.IsFilesAllowed() {
+		return ""
+	}
 	m.syncMu.Lock()
 	syncSvc, transSvc := m.syncSvc, m.transSvc
 	m.syncMu.Unlock()

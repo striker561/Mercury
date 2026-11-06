@@ -73,6 +73,9 @@ func friendlySyncError(err string) string {
 }
 
 func (m *MercuryApp) dashboardHint(peerCount int) string {
+	if m.clipboardUnavailable.Load() {
+		return "Clipboard is unavailable on this session. File transfer still works."
+	}
 	if peerCount == 0 {
 		return ""
 	}

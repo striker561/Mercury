@@ -10,7 +10,7 @@ I am Mercury. Cross-platform LAN clipboard and file sharing. I live in your syst
 
 No cloud. No accounts. No history. **I just work.** Like a messenger god should. For your clipboard. With fewer lightning bolts and zero venture capital.
 
-**Current version:** `0.2.5` · [All releases](https://github.com/striker561/Mercury/releases) · [Documentation](https://striker561.github.io/Mercury/docs/intro)
+**Current release:** `0.3.0` · [All releases](https://github.com/striker561/Mercury/releases) · [Documentation](https://striker561.github.io/Mercury/docs/intro)
 
 ## Screenshots
 
@@ -27,7 +27,7 @@ No cloud. No accounts. No history. **I just work.** Like a messenger god should.
 - **File transfer:** You send a file. Your peer accepts or declines. I deliver either way. I judge both outcomes equally.
 - **System tray:** I sit in your tray like a smug little orb. No dock icon on macOS. I am not here to clutter your life. I am here to run it.
 - **Encryption:** AES-256-GCM over your LAN. Your passphrase never leaves your devices. I do not gossip. Gods have standards.
-- **Auto-updates:** Installed builds check [GitHub Releases](https://github.com/striker561/Mercury/releases) for new versions (tray → **Check for Updates…**). SHA256 checksums ship in each release as `SHA256SUMS`.
+- **Updates:** User-writable installs can check [GitHub Releases](https://github.com/striker561/Mercury/releases) for new versions (tray → **Check for Updates…**). SHA256 checksums ship in each release as `SHA256SUMS`; package-managed installs update through their package manager or installer.
 
 ### What I Am NOT
 
@@ -67,19 +67,19 @@ Stable install links (always point at the newest tagged release):
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
 | macOS (Apple Silicon + Intel) | [mercury-macos-universal.dmg](https://github.com/striker561/Mercury/releases/latest/download/mercury-macos-universal.dmg) | Open DMG, drag **Mercury** to Applications |
 | Linux (Pop!\_OS, Ubuntu)      | [mercury_linux_amd64.deb](https://github.com/striker561/Mercury/releases/latest/download/mercury_linux_amd64.deb)         | `sudo dpkg -i mercury_linux_amd64.deb`     |
-| Windows                       | [mercury-amd64-installer.exe](https://github.com/striker561/Mercury/releases/latest/download/mercury-amd64-installer.exe)             | Run installer (no console window)          |
+| Windows                       | [mercury-amd64-installer.exe](https://github.com/striker561/Mercury/releases/latest/download/mercury-amd64-installer.exe) | Run installer (no console window)          |
 
 Verify downloads with the [`SHA256SUMS`](https://github.com/striker561/Mercury/releases/latest/download/SHA256SUMS) file on the release page.
 
 Bundle ID everywhere: **`com.mercury.app`** (notifications and single-instance).
 
-**Notifications** work from installed builds (`.app`, `.deb`, NSIS). `wails3 dev` skips macOS notifications because there is no bundle ID in dev mode.
+**Notifications** work from bundled builds (`.app`, `.deb`, NSIS). On Linux they need a desktop notification daemon. On macOS, `wails3 dev` runs the dev `.app` bundle, so notifications work there too; a bare `./bin/mercury` falls back to `osascript`. On modern macOS, approve **Local Network** and the file-folder prompts when Mercury asks.
 
 ### Auto-updates
 
-After the first install from a release, use the tray menu **Check for Updates…** to fetch, verify, and apply a newer version from GitHub. The updater uses bare-binary / `.zip` assets (not the `.dmg` / `.deb` / NSIS installers). You may get a quiet notification ~10 minutes after launch when an update exists; install when ready from the tray.
+In-app updates use the [Wails v3 updater](https://v3.wails.io/guides/updater/): it downloads the bare binary or `.app` zip from GitHub, verifies `SHA256SUMS`, swaps it into place, and restarts. This works when the install is user-writable. Linux `.deb` installs live in `/usr/local/bin` and machine-wide Windows installs live under `Program Files`; update those with `apt`/`dpkg` or the installer. Wails reports the swap failure if the install cannot be replaced.
 
-Ship a release by pushing a semver tag, e.g. `git tag v0.2.0 && git push origin v0.2.0`. CI builds installers, updater assets, and `SHA256SUMS`, then publishes the GitHub Release.
+Ship a release by pushing a semver tag, e.g. `git tag v0.3.0 && git push origin v0.3.0`. CI builds installers, updater assets, and `SHA256SUMS`, then publishes the GitHub Release.
 
 ## Getting Started (developers)
 
@@ -118,13 +118,13 @@ Or platform packages:
 
 ```bash
 # macOS (.app + DMG)
-wails3 task darwin:package:universal VERSION=v0.2.0
+wails3 task darwin:package:universal VERSION=v0.3.0
 
 # Linux (.deb for Pop!_OS / Ubuntu)
-wails3 task linux:create:deb VERSION=v0.2.0
+wails3 task linux:create:deb VERSION=v0.3.0
 
 # Windows (NSIS installer, no console window)
-wails3 task windows:package VERSION=v0.2.0
+wails3 task windows:package VERSION=v0.3.0
 ```
 
 More detail: [documentation site](https://striker561.github.io/Mercury/docs/getting-started).
@@ -178,6 +178,14 @@ After closing the window, **left-click the tray icon** or click the dock entry t
 
 If Mercury detects a **named VPN client interface** (WireGuard, Tailscale, etc.), it shows a warning on Home. macOS system `utun` tunnels are ignored so you are not nagged for no reason. VPNs can still block LAN sync. If copies fail, turn the VPN off and try again.
 
+### Windows firewall
+
+The machine-scope NSIS installer adds a firewall rule for `mercury.exe` on private and domain networks. If Windows marks your LAN as **Public**, allow Mercury when Windows prompts, or change the network to Private.
+
+### macOS permissions
+
+Allow **Local Network** for discovery and TCP 47821. If you send from Downloads, Documents, or Desktop, allow the matching Files and Folders permission when prompted; without it the offer is sent but the transfer fails when Mercury opens the file.
+
 ### Logo
 
 The caduceus (winged staff, two snakes) is **Mercury/Hermes**, messenger of the gods. It matches my name.
@@ -205,7 +213,7 @@ mercury/
 
 ## Roadmap
 
-See [TODO.md](TODO.md). **v0.2.0** adds streaming file transfer fixes, in-app updates via GitHub Releases, and release pipeline hardening.
+See [TODO.md](TODO.md) for current work.
 
 ### Linux packages
 

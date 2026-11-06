@@ -68,4 +68,10 @@ func TestMercuryAssetMatcherPrefersUpdaterArtifacts(t *testing.T) {
 	if got := mercuryAssetMatcher(updater.CheckRequest{Platform: "windows", Arch: "amd64"}, assets); got != 5 {
 		t.Fatalf("windows: index %d, want 5", got)
 	}
+	if got := mercuryAssetMatcher(updater.CheckRequest{Platform: "linux", Arch: "arm64"}, assets); got != -1 {
+		t.Fatalf("linux arm64: index %d, want no matching asset", got)
+	}
+	if got := mercuryAssetMatcher(updater.CheckRequest{Platform: "windows", Arch: "arm64"}, assets); got != -1 {
+		t.Fatalf("windows arm64: index %d, want no matching asset", got)
+	}
 }

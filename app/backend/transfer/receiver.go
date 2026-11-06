@@ -48,13 +48,13 @@ func (m *Manager) receiveFile(tid, offerID string, o *Offer, saveDir string, str
 	m.mu.Unlock()
 
 	if err := os.MkdirAll(saveDir, 0755); err != nil {
-		failReason = fmt.Sprintf("create folder: %v", err)
+		failReason = fileError("create folder", err)
 		return
 	}
 
 	f, err := os.Create(part)
 	if err != nil {
-		failReason = fmt.Sprintf("create file: %v", err)
+		failReason = fileError("create file", err)
 		return
 	}
 	defer func() {
@@ -97,11 +97,11 @@ func (m *Manager) receiveFile(tid, offerID string, o *Offer, saveDir string, str
 			return
 		}
 		if err := f.Close(); err != nil {
-			failReason = fmt.Sprintf("close: %v", err)
+			failReason = fileError("close", err)
 			return
 		}
 		if err := os.Rename(part, dst); err != nil {
-			failReason = fmt.Sprintf("rename: %v", err)
+			failReason = fileError("rename", err)
 			return
 		}
 		success = true
@@ -149,6 +149,35 @@ func safeName(name string) string {
 		return "download"
 	}
 	return name
+}
+
+const stalePartAge = 72 * time.Hour
+
+// CleanupStaleParts removes abandoned .part files from the received folder.
+func (m *Manager) CleanupStaleParts(dir string) {
+	cleanupStaleParts(dir, time.Now())
+}
+
+// cleanupStaleParts removes .part files abandoned by an interrupted process.
+func cleanupStaleParts(dir string, now time.Time) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	cutoff := now.Add(-stalePartAge)
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.Contains(entry.Name(), ".part-") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil || !info.ModTime().Before(cutoff) {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		if err := os.Remove(path); err != nil {
+			log.Printf("[transfer] cleanup stale %s: %v", path, err)
+		}
+	}
 }
 
 func uniqueDestination(path string) string {

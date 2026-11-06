@@ -8,7 +8,8 @@ sidebar_position: 6
 
 - Same **passphrase** on every machine (exact match, case-sensitive).
 - Same **LAN:** Mercury does not sync over the public internet.
-- Firewall allows **TCP 47821**.
+- Firewall allows **TCP 47821** and mDNS **UDP 5353**. The machine-scope Windows installer adds a private/domain rule; Public network profiles can still block it.
+- On macOS, **Local Network** is allowed.
 - mDNS enabled on your router (default on most home networks).
 
 Mercury retries discovery automatically when the network changes or no peers are found for a while, so you should not need to restart sync.

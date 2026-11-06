@@ -44,8 +44,14 @@ func mercuryAssetMatcher(req updater.CheckRequest, assets []github.ReleaseAsset)
 	case "darwin":
 		want = updaterAssetDarwin
 	case "linux":
+		if req.Arch != "" && req.Arch != "amd64" {
+			return -1
+		}
 		want = updaterAssetLinux
 	case "windows":
+		if req.Arch != "" && req.Arch != "amd64" {
+			return -1
+		}
 		want = updaterAssetWindows
 	}
 	if want != "" {

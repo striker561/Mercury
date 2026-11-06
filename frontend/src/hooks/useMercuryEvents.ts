@@ -4,12 +4,19 @@ import { Events } from "@wailsio/runtime";
 export function useMercuryEvents(
     onChange: () => void,
     onActivity?: () => void,
+    onFileOffer?: () => void,
 ) {
     useEffect(() => {
-        const off = Events.On("dashboard:changed", () => {
+        const offChange = Events.On("dashboard:changed", () => {
             onActivity?.();
             onChange();
         });
-        return off;
-    }, [onChange, onActivity]);
+        const offOffer = onFileOffer
+            ? Events.On("dashboard:file-offer", onFileOffer)
+            : undefined;
+        return () => {
+            offChange();
+            offOffer?.();
+        };
+    }, [onChange, onActivity, onFileOffer]);
 }
