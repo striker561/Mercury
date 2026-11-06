@@ -17,9 +17,11 @@ export default function Welcome({ onGetStarted }: Props) {
       <h2 className="welcome-title">{copy.welcome.title}</h2>
       <p className="welcome-lead">{copy.welcome.lead}</p>
       <div className="welcome-steps">
-        {copy.welcome.steps.map((step) => (
+        {copy.welcome.steps.map((step, i) => (
           <div key={step} className="welcome-step">
-            <span className="welcome-step-bar" aria-hidden />
+            <span className="welcome-step-num" aria-hidden>
+              {String(i + 1).padStart(2, "0")}
+            </span>
             <span>{step}</span>
           </div>
         ))}

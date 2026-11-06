@@ -1,5 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Eye, EyeSlash } from "@phosphor-icons/react";
+import {
+  ArrowsClockwise,
+  Eye,
+  EyeSlash,
+  FolderSimple,
+  Power,
+} from "@phosphor-icons/react";
+import { Browser } from "@wailsio/runtime";
 import { MercuryApp } from "../../bindings/mercury/app";
 import { copy } from "../copy";
 import type { AppSettings } from "../types/mercury";
@@ -7,6 +14,20 @@ import type { AppSettings } from "../types/mercury";
 interface Props {
   focusPassphrase?: boolean;
   onPassphraseSaved?: () => void;
+}
+
+const REPO = "https://github.com/striker561/Mercury";
+
+const LINKS = [
+  { label: copy.settings.source, href: REPO },
+  { label: copy.settings.issues, href: `${REPO}/issues` },
+  { label: copy.settings.docs, href: "https://striker561.github.io/Mercury" },
+];
+
+function openLink(url: string) {
+  Promise.resolve()
+    .then(() => Browser.OpenURL(url))
+    .catch(() => window.open(url, "_blank", "noopener"));
 }
 
 export default function Settings({
@@ -22,7 +43,14 @@ export default function Settings({
   const [folder, setFolder] = useState("~/Downloads/Mercury/");
   const [savedPass, setSavedPass] = useState("");
   const [saveError, setSaveError] = useState("");
+  const [version, setVersion] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    MercuryApp.GetVersion()
+      .then((v: string) => setVersion(v))
+      .catch(() => setVersion(""));
+  }, []);
 
   useEffect(() => {
     MercuryApp.GetAllSettings().then((s: AppSettings | null) => {
@@ -84,10 +112,17 @@ export default function Settings({
 
   return (
     <>
+      <header className="settings-head">
+        <h1 className="settings-title">{copy.settings.pageTitle}</h1>
+        <p className="settings-lead">{copy.settings.pageLead}</p>
+      </header>
+
       <section className="settings-section">
-        <div className="section-label">{copy.settings.covenant}</div>
+        <div className="section-label">
+          <ArrowsClockwise size={12} weight="bold" aria-hidden />
+          {copy.settings.covenant}
+        </div>
         <div className="group">
-          <p className="group-hint">{copy.settings.covenantHint}</p>
           <div className="group-row group-row-stack">
             <span className="group-row-label">{copy.settings.passphrase}</span>
             <div className="passphrase-wrap">
@@ -117,6 +152,8 @@ export default function Settings({
               </button>
             </div>
           </div>
+          <div className="group-note">{copy.settings.covenantHint}</div>
+          {saveError && <p className="group-note save-error">{saveError}</p>}
           <div className="group-row">
             <span className="group-row-label">{copy.settings.syncEnabled}</span>
             <button
@@ -130,15 +167,18 @@ export default function Settings({
             />
           </div>
           <div className="group-note">{copy.settings.syncEnabledHint}</div>
-          <div className="group-note">{copy.settings.autoSaveHint}</div>
-          {saveError && <p className="group-note save-error">{saveError}</p>}
+          {!pass.trim() && (
+            <div className="group-note">{copy.settings.passphraseRequired}</div>
+          )}
         </div>
       </section>
 
       <section className="settings-section">
-        <div className="section-label">{copy.settings.offerings}</div>
+        <div className="section-label">
+          <FolderSimple size={12} weight="bold" aria-hidden />
+          {copy.settings.offerings}
+        </div>
         <div className="group">
-          <p className="group-hint">{copy.settings.offeringsHint}</p>
           <div className="group-row group-row-stack">
             <span className="group-row-label">{copy.settings.saveTo}</span>
             <div className="group-row-path">
@@ -154,6 +194,7 @@ export default function Settings({
               </button>
             </div>
           </div>
+          <div className="group-note">{copy.settings.offeringsHint}</div>
           <div className="group-row">
             <span className="group-row-label">{copy.settings.acceptFiles}</span>
             <button
@@ -166,7 +207,10 @@ export default function Settings({
             />
           </div>
           <div className="group-note">{copy.settings.acceptFilesHint}</div>
-          <div className="group-row group-row-disabled" data-disabled={!accept}>
+          <div
+            className={`group-row${accept ? "" : " group-row-disabled"}`}
+            data-disabled={!accept}
+          >
             <span className="group-row-label">{copy.settings.autoAccept}</span>
             <button
               type="button"
@@ -179,7 +223,7 @@ export default function Settings({
             />
           </div>
           <div
-            className="group-note group-note-disabled"
+            className={`group-note${accept ? "" : " group-note-disabled"}`}
             data-disabled={!accept}
           >
             {copy.settings.autoAcceptHint}
@@ -188,9 +232,11 @@ export default function Settings({
       </section>
 
       <section className="settings-section">
-        <div className="section-label">{copy.settings.presence}</div>
+        <div className="section-label">
+          <Power size={12} weight="bold" aria-hidden />
+          {copy.settings.presence}
+        </div>
         <div className="group">
-          <p className="group-hint">{copy.settings.presenceHint}</p>
           <div className="group-row">
             <span className="group-row-label">
               {copy.settings.startOnLogin}
@@ -206,6 +252,25 @@ export default function Settings({
           </div>
         </div>
       </section>
+
+      <footer className="settings-about">
+        <div className="settings-about-label">{copy.settings.about}</div>
+        <div className="about-links">
+          {LINKS.map((link) => (
+            <button
+              key={link.href}
+              type="button"
+              className="link-btn"
+              onClick={() => openLink(link.href)}
+            >
+              {link.label}
+            </button>
+          ))}
+        </div>
+        <div className="about-meta">
+          {version ? `Mercury ${version}` : "Mercury"} · {copy.settings.license}
+        </div>
+      </footer>
     </>
   );
 }
