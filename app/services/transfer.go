@@ -71,6 +71,11 @@ func (s *TransferService) AcceptNotification(offerID string) string {
 	return s.mgr.AcceptNotification(offerID)
 }
 
+// CleanupStaleParts removes abandoned .part files from dir.
+func (s *TransferService) CleanupStaleParts(dir string) {
+	s.mgr.CleanupStaleParts(dir)
+}
+
 // SendFile sends a file to a peer. Returns a transfer ID.
 func (s *TransferService) SendFile(peerAddr, filePath string) (string, error) {
 	return s.mgr.SendFile(peerAddr, filePath)

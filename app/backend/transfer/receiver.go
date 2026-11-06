@@ -151,6 +151,35 @@ func safeName(name string) string {
 	return name
 }
 
+const stalePartAge = 72 * time.Hour
+
+// CleanupStaleParts removes abandoned .part files from the received folder.
+func (m *Manager) CleanupStaleParts(dir string) {
+	cleanupStaleParts(dir, time.Now())
+}
+
+// cleanupStaleParts removes .part files abandoned by an interrupted process.
+func cleanupStaleParts(dir string, now time.Time) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	cutoff := now.Add(-stalePartAge)
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.Contains(entry.Name(), ".part-") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil || !info.ModTime().Before(cutoff) {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		if err := os.Remove(path); err != nil {
+			log.Printf("[transfer] cleanup stale %s: %v", path, err)
+		}
+	}
+}
+
 func uniqueDestination(path string) string {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return path
