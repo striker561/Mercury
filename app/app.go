@@ -24,18 +24,19 @@ import (
 
 // MercuryApp is the main application struct exposed to the Wails frontend.
 type MercuryApp struct {
-	syncMu     sync.Mutex
-	syncSvc    *services.SyncService
-	clipSvc    *services.ClipboardService
-	db         *storage.DB
-	transSvc   *services.TransferService
-	showWindow func()
-	hideWindow func()
-	emitChange func()
-	notifySvc  *notifications.NotificationService
-	autostart  *application.AutostartManager
-	syncAt     atomic.Int64 // unix nanos of the last clipboard sync
-	gnomeTray  bool         // GNOME detected — tray may need AppIndicator
+	syncMu      sync.Mutex
+	syncSvc     *services.SyncService
+	clipSvc     *services.ClipboardService
+	db          *storage.DB
+	transSvc    *services.TransferService
+	showWindow  func()
+	hideWindow  func()
+	emitChange  func()
+	fileOfferUI func()
+	notifySvc   *notifications.NotificationService
+	autostart   *application.AutostartManager
+	syncAt      atomic.Int64 // unix nanos of the last clipboard sync
+	gnomeTray   bool         // GNOME detected — tray may need AppIndicator
 }
 
 // setShowWindow registers a callback to show the settings window.
@@ -51,6 +52,11 @@ func (m *MercuryApp) setHideWindow(fn func()) {
 // setEmitChange registers a callback invoked when dashboard state changes.
 func (m *MercuryApp) setEmitChange(fn func()) {
 	m.emitChange = fn
+}
+
+// setFileOfferUI registers a callback that moves the UI to the Home page.
+func (m *MercuryApp) setFileOfferUI(fn func()) {
+	m.fileOfferUI = fn
 }
 
 // HideWindow hides the settings window (tray app stays running).
@@ -219,6 +225,9 @@ func (m *MercuryApp) startSyncLocked(passphrase string) {
 			}()
 		}
 		m.notifyChange()
+		if m.fileOfferUI != nil {
+			m.fileOfferUI()
+		}
 		if m.showWindow != nil {
 			m.showWindow()
 		}

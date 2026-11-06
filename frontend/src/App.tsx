@@ -25,8 +25,6 @@ function App() {
     paused,
   );
 
-  useMercuryEvents(refresh, pulseSync);
-
   const dotClass = paused
     ? "status-dot paused"
     : peers.length > 0
@@ -57,6 +55,13 @@ function App() {
     setFocusPassphrase(false);
     refresh();
   }, [refresh]);
+
+  const showHome = useCallback(() => {
+    setTab("home");
+    setFocusPassphrase(false);
+  }, []);
+
+  useMercuryEvents(refresh, pulseSync, showHome);
 
   const hideWindow = useCallback(() => {
     MercuryApp.HideWindow();

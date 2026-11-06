@@ -32,10 +32,9 @@ func Run(assets embed.FS) error {
 		mercuryApp.setGNOMETrayTip(true)
 	}
 
-	// Create notification service for OS-level file offer alerts.
-	// On macOS this requires a bundled .app with a valid CFBundleIdentifier
-	// (only available in production builds).  In dev mode we fall back to
-	// osascript instead of registering a service that cannot deliver.
+	// Create notification service for OS-level file offer alerts. On macOS it
+	// needs a bundled .app with a CFBundleIdentifier; bare dev binaries fall
+	// back to osascript.
 	notifySvc := notifications.New()
 
 	svcs := []application.Service{
@@ -110,7 +109,9 @@ func Run(assets embed.FS) error {
 		if settingsWindow == nil {
 			return
 		}
-		app.Show()
+		// app.Show is the one call that does not marshal itself to the main
+		// thread; the window methods below already do.
+		application.InvokeSync(app.Show)
 		settingsWindow.Restore()
 		settingsWindow.Show()
 		settingsWindow.Focus()
@@ -164,6 +165,9 @@ func Run(assets embed.FS) error {
 		app.Event.Emit("dashboard:changed")
 		updateTray(tray, refs, mercuryApp)
 	})
+	mercuryApp.setFileOfferUI(func() {
+		app.Event.Emit("dashboard:file-offer")
+	})
 
 	go func() {
 		var last string
@@ -210,8 +214,8 @@ func Run(assets embed.FS) error {
 }
 
 // isDarwinDev returns true on macOS when NOT running from a bundled .app.
-// The notification service needs CFBundleIdentifier which only exists
-// inside a proper macOS bundle (production builds).
+// The notification service needs a CFBundleIdentifier, which only exists
+// inside a proper macOS bundle.
 func isDarwinDev() bool {
 	exe, err := os.Executable()
 	if err != nil {
