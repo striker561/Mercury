@@ -38,6 +38,7 @@ function normalize(raw: RawDashboardState): DashboardState {
 
 export function useDashboard() {
   const [state, setState] = useState<DashboardState>(empty);
+  const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -45,6 +46,8 @@ export function useDashboard() {
       if (data) setState(normalize(data));
     } catch {
       // Bindings unavailable outside Wails runtime.
+    } finally {
+      setReady(true);
     }
   }, []);
 
@@ -52,5 +55,5 @@ export function useDashboard() {
     refresh();
   }, [refresh]);
 
-  return { state, refresh };
+  return { state, ready, refresh };
 }
