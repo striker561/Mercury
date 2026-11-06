@@ -35,13 +35,14 @@ type OnFileAcceptCallback func(offerID, peerAddr string)
 
 // SyncService manages LAN peer discovery, clipboard broadcast, and receive.
 type SyncService struct {
-	manager       *sync.Manager
-	onFileOffer   OnFileOfferCallback
-	onFileAccept  OnFileAcceptCallback
-	onResync      func()
-	resyncAllowed func() bool
-	watchCancel   context.CancelFunc
-	watchDone     chan struct{}
+	manager            *sync.Manager
+	onFileOffer        OnFileOfferCallback
+	onFileAccept       OnFileAcceptCallback
+	onResync           func()
+	resyncAllowed      func() bool
+	clipboardAvailable bool
+	watchCancel        context.CancelFunc
+	watchDone          chan struct{}
 }
 
 // SetOnMessage registers a callback for non-clipboard messages (file chunks)
@@ -54,13 +55,19 @@ func (s *SyncService) SetOnMessage(handler func(byte, []byte, string)) {
 // machine's stable device ID (announced via mDNS TXT for dual-boot dedup).
 func NewSyncService(passphrase, deviceID string) *SyncService {
 	return &SyncService{
-		manager: sync.NewManager(passphrase, deviceID),
+		manager:            sync.NewManager(passphrase, deviceID),
+		clipboardAvailable: true,
 	}
 }
 
 // DeriveKey derives the encryption key from the passphrase.
 func DeriveKey(passphrase string) []byte {
 	return crypto.DeriveKey(passphrase)
+}
+
+// SetClipboardAvailable tells sync whether local clipboard writes are safe.
+func (s *SyncService) SetClipboardAvailable(ok bool) {
+	s.clipboardAvailable = ok
 }
 
 // SetOnFileOffer registers a callback for incoming file offers.
@@ -145,8 +152,16 @@ func (s *SyncService) Start() error {
 		}
 		switch p.Type {
 		case "text":
+			if !s.clipboardAvailable {
+				log.Printf("[sync] clipboard unavailable; dropping text")
+				return
+			}
 			goclipboard.Write(goclipboard.FmtText, []byte(p.Content))
 		case "image":
+			if !s.clipboardAvailable {
+				log.Printf("[sync] clipboard unavailable; dropping image")
+				return
+			}
 			goclipboard.Write(goclipboard.FmtImage, p.Image)
 		case "file_offer":
 			log.Printf("[sync] received file offer: %s (%d bytes)", p.FileName, p.FileSize)
