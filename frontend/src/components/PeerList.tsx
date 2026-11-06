@@ -1,64 +1,51 @@
-import { Devices } from "@phosphor-icons/react";
 import { copy } from "../copy";
+import Bolt from "./Bolt";
 import type { Peer } from "../types/mercury";
 
 interface Props {
   peers: Peer[];
+  paused?: boolean;
 }
 
 function peerLabel(peer: Peer): string {
   return peer.hostname || peer.id || copy.peers.unknown;
 }
 
-function peerInitial(name: string): string {
-  const ch = name.trim().charAt(0);
-  return ch ? ch.toUpperCase() : "?";
-}
-
 function peerIP(addr: string): string {
   return addr?.split(":")[0] ?? "";
 }
 
-export default function PeerList({ peers }: Props) {
+export default function PeerList({ peers, paused }: Props) {
   return (
     <div>
       <div className="section-label">{copy.peers.section}</div>
-      <div className="group">
-        {peers.length === 0 ? (
-          <div className="empty-state">
-            <Devices size={24} className="empty-state-icon" aria-hidden />
-            <p>{copy.peers.empty}</p>
-            <p className="hint">{copy.peers.emptyHint}</p>
-          </div>
-        ) : (
-          <ul className="peer-list">
-            {peers.map((peer) => {
-              const name = peerLabel(peer);
-              return (
-                <li key={peer.id} className="peer-item peer-item-enter">
-                  <span className="peer-avatar" aria-hidden>
-                    {peerInitial(name)}
-                  </span>
-                  <span className="peer-name">{name}</span>
-                  <span
-                    className={`peer-status${peer.reachable ? " online" : ""}`}
-                    title={
-                      peer.reachable
-                        ? copy.peers.reachable
-                        : copy.peers.checking
-                    }
-                    aria-label={
+      <div className="list">
+        <ul className="peer-list">
+          {peers.map((peer) => {
+            const name = peerLabel(peer);
+            return (
+              <li key={peer.id} className="peer-item">
+                <span className="peer-glyph">
+                  <Bolt
+                    state={!paused && peer.reachable ? "live" : "idle"}
+                    height={12}
+                    label={
                       peer.reachable
                         ? copy.peers.reachable
                         : copy.peers.checking
                     }
                   />
-                  <span className="peer-addr">{peerIP(peer.addr)}</span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+                </span>
+                <span className="peer-name" title={name}>
+                  {name}
+                </span>
+                <span className="peer-addr" title={peerIP(peer.addr)}>
+                  {peerIP(peer.addr)}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
       </div>
     </div>
   );

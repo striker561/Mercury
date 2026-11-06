@@ -4,7 +4,7 @@ export const copy = {
     title: "You have summoned Mercury",
     lead: "I deliver across your LAN. Encrypted. Without cloud worship.",
     steps: [
-      "Pick a passphrase — the same words on every device",
+      "Pick a passphrase. The same words on every device",
       "Run me on each machine on the same Wi‑Fi or LAN",
       "Copy text or files. I carry them. You paste on the other side.",
     ],
@@ -13,26 +13,22 @@ export const copy = {
   },
 
   status: {
-    pausedTitle: "I rest",
+    pausedTitle: "I Rest",
     pausedSub: "Resume me in Settings when you are ready to serve again.",
-    issueTitle: "Something is wrong",
-    syncErrorTitle: "Sync needs attention",
-    syncStoppedTitle: "Sync is stopped",
+    issueTitle: "Something Is Wrong",
+    syncErrorTitle: "Sync Needs Attention",
+    syncStoppedTitle: "Sync Is Stopped",
     syncStoppedSub: "I am not listening right now. Retry to start again.",
-    searchingTitle: "Searching for devices",
+    searchingTitle: "Searching for Devices",
     searchingSub:
       "I am listening on this network. Open Mercury on another machine with the same passphrase.",
     retry: "Retry",
     retrying: "Retrying…",
-    vpnTitle: "VPN detected",
+    vpnTitle: "VPN Detected",
     vpnSub:
       "Your VPN may block LAN sync. If copies fail one way, turn the VPN off and try again.",
-    connectedTitle: (n: number) =>
-      `In service · ${n} device${n === 1 ? "" : "s"}`,
-    connectedSub: "Copy on one machine. Paste on another. I handle the rest.",
-    waitingTitle: "Awaiting your fleet",
-    waitingSub:
-      "Open Mercury on another device. Same passphrase. Same network. I will find it.",
+    connectedTitle: "In Service",
+    connectedSub: "Copy here. Paste there.",
     gnomeTip:
       "GNOME: install AppIndicator for tray presence, or speak to me through this window.",
   },
@@ -41,24 +37,15 @@ export const copy = {
     carrying: "Carrying",
   },
 
-  header: {
-    paused: "Resting",
-    idle: "Alone",
-    peers: (n: number) => `${n} peer${n === 1 ? "" : "s"}`,
-  },
-
   peers: {
     section: "Your fleet",
-    empty: "No devices nearby",
-    emptyHint:
-      "Other machines show up here once Mercury is running on the same LAN.",
     unknown: "Unknown device",
     checking: "Checking connection…",
     reachable: "Connected",
   },
 
   transfers: {
-    section: "File deliveries",
+    section: "Cargo",
     incoming: "Incoming from a peer",
     decline: "Decline",
     accept: "Accept",
@@ -67,18 +54,22 @@ export const copy = {
   },
 
   settings: {
-    covenant: "Sync",
+    pageTitle: "Settings",
+    pageLead: "How we share a secret, where files land, and when I wake.",
+    about: "About",
+    source: "Source",
+    issues: "Issues",
+    docs: "Docs",
+    license: "MIT",
+    covenant: "Covenant",
     covenantHint:
-      "Your passphrase is the shared secret. Same words on every device. I use it to encrypt what I carry. It never leaves your machines.",
-    offerings: "Files",
-    offeringsHint:
-      "When someone copies a file for you, it appears on Home as an offer. Choose where saved files land.",
-    presence: "Startup",
-    presenceHint: "Whether I wake when you log in.",
+      "The same words on every device. Saves when you leave the field.",
+    offerings: "Offerings",
+    offeringsHint: "Where accepted files land.",
+    presence: "Presence",
     passphrase: "Passphrase",
-    passphrasePlaceholder: "Same on every device",
+    passphrasePlaceholder: "Enter a passphrase",
     passphraseRequired: "Set a passphrase first.",
-    autoSaveHint: "Saves when you leave the field or press Enter.",
     syncEnabled: "Clipboard sync",
     syncEnabledHint: "Off means I rest. No watching, no delivering.",
     saveTo: "Save files to",
@@ -87,6 +78,6 @@ export const copy = {
     acceptFilesHint: "Let peers send you files, not just text and images.",
     autoAccept: "Accept files automatically",
     autoAcceptHint: "Skip the prompt. I save straight to your folder.",
-    startOnLogin: "Start on login",
+    startOnLogin: "Open at login",
   },
 } as const;

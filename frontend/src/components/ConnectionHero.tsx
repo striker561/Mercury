@@ -1,59 +1,23 @@
-import { Fragment, useCallback, useState } from "react";
+import { useCallback, useState } from "react";
 import { MercuryApp } from "../../bindings/mercury/app";
 import { copy } from "../copy";
+import Bolt, { type BoltState } from "./Bolt";
 import type { DashboardState } from "../types/mercury";
 
 interface Props {
   state: DashboardState;
   onRetry?: () => void;
+  strike?: number;
+  centered?: boolean;
 }
 
-function ConnectionNodes({
-  count,
-  paused,
-  connected,
-}: {
-  count: number;
-  paused: boolean;
-  connected: boolean;
-}) {
-  if (paused) {
-    return <span className="status-dot paused" aria-hidden />;
-  }
-
-  if (connected && count > 0) {
-    const display = Math.min(count, 5);
-    return (
-      <div className="connection-nodes" aria-hidden>
-        {Array.from({ length: display }, (_, i) => (
-          <Fragment key={i}>
-            {i > 0 && <span className="connection-line" />}
-            <span className="connection-node connected pulse" />
-          </Fragment>
-        ))}
-        {count > 5 && <span className="connection-more">+{count - 5}</span>}
-      </div>
-    );
-  }
-
-  return (
-    <div className="connection-nodes" aria-hidden>
-      <span className="connection-node idle" />
-    </div>
-  );
-}
-
-export default function ConnectionHero({ state, onRetry }: Props) {
-  const {
-    peers,
-    paused,
-    hint,
-    vpnActive,
-    gnomeTrayTip,
-    hasPassphrase,
-    syncRunning,
-    syncError,
-  } = state;
+export default function ConnectionHero({
+  state,
+  onRetry,
+  strike,
+  centered,
+}: Props) {
+  const { peers, paused, hint, hasPassphrase, syncRunning, syncError } = state;
   const count = peers.length;
   const [retrying, setRetrying] = useState(false);
 
@@ -73,7 +37,6 @@ export default function ConnectionHero({ state, onRetry }: Props) {
   let title: string;
   let sub: string;
   let warn = false;
-  let heroClass = "connection-hero";
   let showRetry = false;
 
   if (paused) {
@@ -83,50 +46,44 @@ export default function ConnectionHero({ state, onRetry }: Props) {
     title = copy.status.syncErrorTitle;
     sub = syncError;
     warn = true;
-    heroClass += " connection-hero-warn";
     showRetry = hasPassphrase;
   } else if (hasPassphrase && !syncRunning) {
     title = copy.status.syncStoppedTitle;
     sub = copy.status.syncStoppedSub;
     warn = true;
-    heroClass += " connection-hero-warn";
     showRetry = true;
   } else if (hint) {
     title = copy.status.issueTitle;
     sub = hint;
     warn = true;
-    heroClass += " connection-hero-warn";
-  } else if (vpnActive) {
-    title = copy.status.vpnTitle;
-    sub = copy.status.vpnSub;
-    warn = true;
-    heroClass += " connection-hero-warn";
   } else if (count > 0) {
-    title = copy.status.connectedTitle(count);
+    title = copy.status.connectedTitle;
     sub = copy.status.connectedSub;
-  } else if (hasPassphrase) {
+  } else {
     title = copy.status.searchingTitle;
     sub = copy.status.searchingSub;
-  } else {
-    title = copy.status.waitingTitle;
-    sub = copy.status.waitingSub;
   }
 
-  const showNodes =
-    !hint && !vpnActive && !syncError && (syncRunning || paused || !hasPassphrase);
+  const glyph: BoltState = paused
+    ? "resting"
+    : syncError || (hasPassphrase && !syncRunning)
+      ? "error"
+      : hint
+        ? "warn"
+        : count > 0
+          ? "live"
+          : "idle";
 
   return (
-    <div className={heroClass}>
+    <div
+      className={`connection-hero${centered ? " connection-hero-solo" : ""}`}
+    >
       <div className="connection-hero-top">
-        {showNodes && (
-          <ConnectionNodes
-            count={count}
-            paused={paused}
-            connected={count > 0 && !paused}
-          />
-        )}
-        <div className="connection-hero-text">
-          <div className="connection-hero-title">{title}</div>
+        <Bolt state={glyph} height={centered ? 64 : 48} strike={strike} />
+        <div className="connection-hero-text" aria-live="polite">
+          <div className={`connection-hero-title${warn ? " warn" : ""}`}>
+            {title}
+          </div>
           <div className={`connection-hero-sub${warn ? " warn" : ""}`}>
             {sub}
           </div>
@@ -143,9 +100,6 @@ export default function ConnectionHero({ state, onRetry }: Props) {
             {retrying ? copy.status.retrying : copy.status.retry}
           </button>
         </div>
-      )}
-      {gnomeTrayTip && !hint && !vpnActive && !syncError && (
-        <div className="connection-hero-foot">{copy.status.gnomeTip}</div>
       )}
     </div>
   );
