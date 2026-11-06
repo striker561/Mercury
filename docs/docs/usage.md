@@ -30,6 +30,8 @@ On Linux with AppIndicator, a left-click may open the tray menu instead of toggl
 | **Files**   | Download folder, accept file offers, auto-accept |
 | **Startup** | Launch Mercury when you log in                   |
 
+Turning **Accept files** off only rejects new incoming offers; clipboard sync keeps running. Auto-accept is disabled while it is off.
+
 ### When Mercury is active
 
 Mercury **rests** (no clipboard polling) when:
@@ -44,9 +46,12 @@ Clipboard watching starts automatically when at least one peer is online.
 
 1. Copy a **file** in Finder (macOS), **File Explorer** (Windows), or your **Linux file manager** — or copy a file path as text.
 2. Mercury detects the file and sends an **offer** to connected peers.
-3. The recipient sees the offer on **Home** and can **Accept** or **Decline**.
+3. The recipient sees the offer on **Home** and can **Accept** or **Decline**. A decline removes the offer locally; no rejection frame is sent to the sender.
 4. Accepted files save to the folder configured in Settings (default `~/Downloads/Mercury/`).
+5. There is no partial final file: the receiver writes a `.part-*` file and renames it only after the full size arrives. A crash can leave a part behind; Mercury cleans old parts when sync starts.
+
+On macOS, allow **Local Network** and the file-folder prompt if you send from Downloads, Documents, or Desktop.
 
 ## Notifications
 
-OS notifications (incoming files) work from bundled builds (`.app`, `.deb`, installer). On macOS, `wails3 dev` runs the dev `.app` bundle, so notifications work there too; a bare `./bin/mercury` falls back to `osascript`.
+OS notifications (incoming files) work from bundled builds (`.app`, `.deb`, installer). Linux needs a desktop notification daemon. On macOS, `wails3 dev` runs the dev `.app` bundle, so notifications work there too; a bare `./bin/mercury` falls back to `osascript`.

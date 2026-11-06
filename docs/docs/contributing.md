@@ -21,6 +21,9 @@ GOTOOLCHAIN=go1.26.0 wails3 dev
 # Backend (clipboard integration tests need a live OS clipboard, excluded in CI)
 go test $(go list ./... | grep -v '/clipboard$')
 
+# Windows-specific backend code (clipboard file-list parser)
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go vet ./app/backend/...
+
 # Frontend
 cd frontend && bun install && bun run build
 ```

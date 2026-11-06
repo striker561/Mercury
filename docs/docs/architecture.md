@@ -45,7 +45,7 @@ sequenceDiagram
 | Package                 | Role                                                                       |
 | ----------------------- | -------------------------------------------------------------------------- |
 | `app/`                  | `MercuryApp`: main struct exposed to frontend via Wails bindings           |
-| `app/backend/clipboard` | Polls the OS clipboard for text / image / file paths (Finder, Explorer)    |
+| `app/backend/clipboard` | Polls the OS clipboard for text / image / file paths (Finder, Explorer, Linux file managers) |
 | `app/backend/crypto`    | AES-256-GCM encrypt/decrypt + PBKDF2 key derivation                        |
 | `app/backend/fileinfo`  | Detects whether copied text is a file path                                 |
 | `app/backend/storage`   | SQLite-backed settings persistence                                         |
@@ -124,7 +124,7 @@ copy path → detect file → offer → accept/reject → chunked transfer → r
 6. If accepted, machine A reads the file in **256 KiB chunks**, encrypts each chunk, and sends them over TCP.
 7. Machine B reassembles the chunks in order and writes the file to the configured download directory.
 
-If B declines, A gets a cancellation notice. No hard feelings. Files are not partially saved; the transfer either completes or it does not.
+If B declines, the offer is removed locally; no rejection frame is sent, so A never starts sending. The receiver writes a `.part-*` file and renames it only after the full size arrives. A crash can leave a part behind; Mercury removes old parts when sync starts.
 
 ## Peer Lifecycle
 
@@ -148,4 +148,4 @@ If B declines, A gets a cancellation notice. No hard feelings. Files are not par
 | Peer eviction              | 3 consecutive send failures | A send failure resets on success; 3 strikes and you are out |
 | mDNS interval              | ~2 seconds                  | Standard mDNS timing                                        |
 | Clipboard poll rate        | ~150 ms                     | Fast enough to feel instant, slow enough to not peg a core  |
-| Max simultaneous transfers | 1 per peer                  | Keeps the wire protocol simple                              |
+| Transfer concurrency       | One receive stream per offer | Each accepted offer has its own transfer ID and stream      |
