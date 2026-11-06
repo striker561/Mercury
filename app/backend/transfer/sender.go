@@ -41,7 +41,7 @@ func (m *Manager) sendFile(tid, offerID, peerAddr, filePath string, fileSize int
 
 	f, err := os.Open(filePath)
 	if err != nil {
-		failReason = fmt.Sprintf("open: %v", err)
+		failReason = fileError("open", err)
 		return
 	}
 	defer f.Close()

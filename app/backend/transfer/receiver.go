@@ -48,13 +48,13 @@ func (m *Manager) receiveFile(tid, offerID string, o *Offer, saveDir string, str
 	m.mu.Unlock()
 
 	if err := os.MkdirAll(saveDir, 0755); err != nil {
-		failReason = fmt.Sprintf("create folder: %v", err)
+		failReason = fileError("create folder", err)
 		return
 	}
 
 	f, err := os.Create(part)
 	if err != nil {
-		failReason = fmt.Sprintf("create file: %v", err)
+		failReason = fileError("create file", err)
 		return
 	}
 	defer func() {
@@ -97,11 +97,11 @@ func (m *Manager) receiveFile(tid, offerID string, o *Offer, saveDir string, str
 			return
 		}
 		if err := f.Close(); err != nil {
-			failReason = fmt.Sprintf("close: %v", err)
+			failReason = fileError("close", err)
 			return
 		}
 		if err := os.Rename(part, dst); err != nil {
-			failReason = fmt.Sprintf("rename: %v", err)
+			failReason = fileError("rename", err)
 			return
 		}
 		success = true

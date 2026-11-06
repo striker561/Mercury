@@ -240,6 +240,7 @@ func (m *Manager) AcceptOffer(offerID, saveDir string) (string, error) {
 	tid := m.NewOfferID()
 	p := &Progress{ID: tid, FileName: o.FileName, FileSize: o.FileSize, Status: StatusAccepting, CreatedAt: time.Now()}
 	m.mu.Lock()
+	m.pruneFailedTransfersLocked(o.FileName)
 	m.transfers[tid] = p
 	m.pruneTerminalLocked()
 	m.mu.Unlock()
@@ -283,6 +284,15 @@ func (m *Manager) AcceptNotification(offerID string) string {
 		return ""
 	}
 	return o.path
+}
+
+// pruneFailedTransfersLocked drops earlier failures for fileName so retries replace them.
+func (m *Manager) pruneFailedTransfersLocked(fileName string) {
+	for id, p := range m.transfers {
+		if p.FileName == fileName && p.Status == StatusFailed {
+			delete(m.transfers, id)
+		}
+	}
 }
 
 func (m *Manager) pruneTerminalLocked() {
@@ -339,6 +349,7 @@ func (m *Manager) SendFile(peerAddr, filePath string) (string, error) {
 	tid := m.NewOfferID()
 	p := &Progress{ID: tid, FileName: filepath.Base(filePath), FileSize: fi.Size(), Status: StatusSending, CreatedAt: time.Now()}
 	m.mu.Lock()
+	m.pruneFailedTransfersLocked(p.FileName)
 	m.transfers[tid] = p
 	m.pruneTerminalLocked()
 	m.mu.Unlock()
@@ -357,6 +368,7 @@ func (m *Manager) SendFileForOffer(offerID, peerAddr, filePath string) (string, 
 	tid := m.NewOfferID()
 	p := &Progress{ID: tid, FileName: filepath.Base(filePath), FileSize: fi.Size(), Status: StatusSending, CreatedAt: time.Now()}
 	m.mu.Lock()
+	m.pruneFailedTransfersLocked(p.FileName)
 	m.transfers[tid] = p
 	m.pruneTerminalLocked()
 	m.mu.Unlock()

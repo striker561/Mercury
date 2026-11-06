@@ -1,8 +1,11 @@
 package transfer
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"net"
+	"runtime"
 
 	"mercury/app/backend/transport"
 )
@@ -26,4 +29,12 @@ func peerTCPAddr(peerAddr string) string {
 		return net.JoinHostPort(host, port)
 	}
 	return fmt.Sprintf("%s:%d", stripPort(peerAddr), transport.Port)
+}
+
+// fileError adds the System Settings path a macOS user needs after a TCC denial.
+func fileError(op string, err error) string {
+	if runtime.GOOS == "darwin" && errors.Is(err, fs.ErrPermission) {
+		return fmt.Sprintf("%s: %v — allow Mercury in System Settings → Privacy & Security → Files and Folders", op, err)
+	}
+	return fmt.Sprintf("%s: %v", op, err)
 }
