@@ -1,22 +1,18 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef } from "react";
+
+const STRIKE_MS = 340;
 
 export function useSyncActivity(peerCount: number, paused: boolean) {
-  const [active, setActive] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, []);
+  const [strikes, setStrikes] = useState(0);
+  const lastStrike = useRef(0);
 
   const pulse = useCallback(() => {
-    if (peerCount > 0 && !paused) {
-      setActive(true);
-      if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => setActive(false), 800);
-    }
+    if (peerCount === 0 || paused) return;
+    const now = Date.now();
+    if (now - lastStrike.current < STRIKE_MS) return;
+    lastStrike.current = now;
+    setStrikes((n) => n + 1);
   }, [peerCount, paused]);
 
-  return { active, pulse };
+  return { strikes, pulse };
 }
