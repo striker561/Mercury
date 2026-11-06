@@ -25,6 +25,20 @@
             <string>true</string>
         <key>NSHumanReadableCopyright</key>
             <string>© now, My Company</string>
+        <key>NSLocalNetworkUsageDescription</key>
+            <string>Mercury needs local network access to discover peers and transfer files.</string>
+        <key>NSBonjourServices</key>
+        <array>
+            <string>_mercury._tcp</string>
+        </array>
+        <key>NSDesktopFolderUsageDescription</key>
+            <string>Mercury needs access to send files you copy from the Desktop.</string>
+        <key>NSDocumentsFolderUsageDescription</key>
+            <string>Mercury needs access to send files you copy from Documents.</string>
+        <key>NSDownloadsFolderUsageDescription</key>
+            <string>Mercury needs access to send files you copy from Downloads and save received files.</string>
+        <key>NSRemovableVolumesUsageDescription</key>
+            <string>Mercury needs access to send files from removable drives.</string>
         <key>NSAppTransportSecurity</key>
         <dict>
             <key>NSAllowsLocalNetworking</key>

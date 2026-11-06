@@ -49,4 +49,4 @@ Clipboard watching starts automatically when at least one peer is online.
 
 ## Notifications
 
-OS notifications (incoming files) work from **installed** builds (`.app`, `.deb`, installer). `wails3 dev` on macOS skips notifications because there is no bundle ID in dev mode.
+OS notifications (incoming files) work from bundled builds (`.app`, `.deb`, installer). On macOS, `wails3 dev` runs the dev `.app` bundle, so notifications work there too; a bare `./bin/mercury` falls back to `osascript`.

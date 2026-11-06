@@ -41,5 +41,5 @@ dev_mode:
       type: blocking
     - cmd: go build -o bin/mercury .
       type: blocking
-    - cmd: ./bin/mercury
+    - cmd: wails3 task run
       type: primary
