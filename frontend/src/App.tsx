@@ -9,37 +9,21 @@ import Settings from "./components/Settings";
 import FileTransfer from "./components/FileTransfer";
 import Welcome from "./components/Welcome";
 import ConnectionHero from "./components/ConnectionHero";
-import ActivityStrip from "./components/ActivityStrip";
+import HeaderNotice, { type NoticeItem } from "./components/HeaderNotice";
 import PeerList from "./components/PeerList";
 import SegmentedControl from "./components/SegmentedControl";
 import type { Tab } from "./types/mercury";
 
 function App() {
-  const { state, refresh } = useDashboard();
+  const { state, ready, refresh } = useDashboard();
   const [tab, setTab] = useState<Tab>("home");
   const [focusPassphrase, setFocusPassphrase] = useState(false);
 
-  const { peers, paused, transfers } = state;
-  const { active: syncActive, pulse: pulseSync } = useSyncActivity(
-    peers.length,
-    paused,
-  );
-
-  const dotClass = paused
-    ? "status-dot paused"
-    : peers.length > 0
-      ? "status-dot connected pulse"
-      : "status-dot idle";
-
-  const statusLabel = paused
-    ? copy.header.paused
-    : peers.length > 0
-      ? copy.header.peers(peers.length)
-      : copy.header.idle;
-
-  const isTransferring = transfers.some(
+  const { peers, paused } = state;
+  const transferring = state.transfers.some(
     (t) => t.status === "sending" || t.status === "receiving",
   );
+  const { strikes, pulse: pulseSync } = useSyncActivity(peers.length, paused);
 
   const handleGetStarted = useCallback(() => {
     setTab("settings");
@@ -68,6 +52,23 @@ function App() {
   }, []);
 
   const showWelcome = tab === "home" && !state.hasPassphrase;
+  const notices: NoticeItem[] = [];
+  if (state.vpnActive) {
+    notices.push({
+      icon: "vpn",
+      title: copy.status.vpnTitle,
+      text: copy.status.vpnSub,
+    });
+  }
+  if (state.gnomeTrayTip) {
+    notices.push({ icon: "tray", text: copy.status.gnomeTip });
+  }
+  const idleHome =
+    tab === "home" &&
+    !showWelcome &&
+    peers.length === 0 &&
+    state.transfers.length === 0 &&
+    state.offers.length === 0;
 
   return (
     <>
@@ -76,17 +77,14 @@ function App() {
           <img
             src="/mercury-logo.png"
             alt=""
-            className={`header-logo${isTransferring ? " header-logo-active" : ""}`}
+            className={`header-logo${transferring ? " header-logo-active" : ""}${paused ? " header-logo-resting" : ""}`}
             aria-hidden
           />
-          <span className="header-title">Mercury</span>
+          <span className="visually-hidden">Mercury</span>
         </div>
         <div className="header-spacer" />
         <div className="header-actions">
-          <div className="header-status">
-            <span className={dotClass} aria-hidden />
-            <span>{statusLabel}</span>
-          </div>
+          <HeaderNotice items={notices} />
           <SegmentedControl active={tab} onChange={handleTabChange} />
           <button
             type="button"
@@ -102,23 +100,42 @@ function App() {
       <main
         className={`content${tab === "settings" ? " content-settings" : ""}`}
       >
-        <div key={tab} className="content-panel">
-          {tab === "settings" ? (
+        <div
+          key={tab}
+          className={`content-panel${showWelcome || idleHome ? " content-panel-centered" : ""}`}
+        >
+          {!ready ? (
+            <div className="splash">
+              <img
+                src="/mercury-logo.png"
+                alt=""
+                className="splash-logo"
+                aria-hidden
+              />
+            </div>
+          ) : tab === "settings" ? (
             <Settings
               focusPassphrase={focusPassphrase}
               onPassphraseSaved={handlePassphraseSaved}
             />
+          ) : showWelcome ? (
+            <Welcome onGetStarted={handleGetStarted} />
           ) : (
             <>
-              {showWelcome && <Welcome onGetStarted={handleGetStarted} />}
-              <ConnectionHero state={state} onRetry={refresh} />
-              <ActivityStrip active={syncActive} />
+              <ConnectionHero
+                state={state}
+                onRetry={refresh}
+                strike={strikes}
+                centered={idleHome}
+              />
+              {peers.length > 0 && (
+                <PeerList peers={state.peers} paused={paused} />
+              )}
               <FileTransfer
                 offers={state.offers}
                 transfers={state.transfers}
                 onChange={refresh}
               />
-              <PeerList peers={state.peers} />
             </>
           )}
         </div>
